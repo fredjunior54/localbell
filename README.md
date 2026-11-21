@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.3.9</strong></p>
+<p align="center"><strong>Version 1.3.10</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -93,15 +93,23 @@ make format       # Format Rust and Kotlin code
 
 On the release machine, `ANDROID_SIGNING_DIR` must contain exactly one `.p12`, `.jks`, or `.keystore`. Supply the store password via the environment or a private `release-password` file in that directory. Set `KEY_ALIAS` if the store has multiple private keys and `KEY_PASSWORD` if the key password differs from the store password. Keep the signing material outside Git.
 
-On `main`, run the release script with a commit subject and the files for that iteration:
+On `main`, run the version bump with a commit subject and the files for that iteration:
 
 ```bash
 ./scripts/bump-version.sh "docs: Clarify Linux installation" -- README.md
 ```
 
-The default bump is **patch**. Only Fred Junior can authorize an explicit `minor` or `major` bump. The script tests and builds locally, commits the selected changes with the synchronized version, pushes the branch and annotated tag, and publishes the signed APK and Linux archive to GitHub Releases. GitHub Actions only runs CI.
+The default bump is **patch**. Only Fred Junior can authorize `minor` or `major`. The script tests and builds locally, signs the APK, commits the selected changes with the synchronized version, and pushes `main`. It does not tag, publish, or install the APK.
 
-After verification, `dist/` holds the current signed APK and Linux archive. Previous LocalBell outputs are moved under `.git/localbell-releases/`; unrelated files stay in `dist/`.
+`dist/` holds the current APK and Linux archive. The script retains verified artifacts, checksums, and the commit ID for each prepared build under `.git/localbell-releases/vX.Y.Z/` on the build machine.
+
+When ready to publish, run this on the build machine with GitHub CLI authenticated and `jq` available:
+
+```bash
+./scripts/publish-release.sh vX.Y.Z
+```
+
+This tags the prepared commit and publishes its two assets without rebuilding. If the upload is interrupted, rerun the same command. It reuses matching uploaded assets and never replaces a public release or moves a tag. If GitHub reports a mismatched or incomplete asset, review the draft before retrying. GitHub Actions only runs CI.
 
 To automatically update an already-paired phone over Wi-Fi, run `adb devices -l` while the phone is online. Copy its exact serial ending in `._adb-tls-connect._tcp`, then save it once in fish (replace the example serial):
 
@@ -109,15 +117,7 @@ To automatically update an already-paired phone over Wi-Fi, run `adb devices -l`
 set -Ux LOCALBELL_ADB_WIFI_DEVICE 'adb-EXAMPLE._adb-tls-connect._tcp'
 ```
 
-The release script updates only that phone, without clearing its app data. If the phone is unavailable or installation fails, the GitHub release still proceeds.
-
-If the tag was pushed but release creation failed, retry with the same tag and the verified assets retained under `.git/localbell-releases/vX.Y.Z/`. Do not bump the version or move the tag:
-
-```bash
-gh release create vX.Y.Z --repo fredjunior54/localbell --verify-tag --generate-notes \
-  .git/localbell-releases/vX.Y.Z/localbell-X.Y.Z.apk \
-  .git/localbell-releases/vX.Y.Z/localbell-X.Y.Z-linux-amd64.tar.gz
-```
+After confirming that the GitHub release is public with both verified assets, the publisher updates only that phone without clearing app data or downgrading. An unavailable phone or failed APK install does not invalidate the release.
 
 ## 📄 License
 

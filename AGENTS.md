@@ -27,11 +27,13 @@ make lint-app        # gradle lint + spotless
 
 ## Versioning — CRITICAL
 
-End every iteration that changes project files with one patch release. Do not release a no-op iteration. Only Fred Junior may authorize a major or minor bump.
+End every iteration that changes project files with one patch bump. Do not bump a no-op iteration. Only Fred Junior may authorize a major or minor bump.
 
-Run `scripts/bump-version.sh "fix: Describe the change" -- path/to/file` from `main`, listing only the files for that iteration. The script synchronizes Gradle, Arch packaging metadata, the Cargo package and desktop binary versions, and the Git tag; tests, lints, and builds locally; commits once; pushes `main` and the tag; and publishes the signed APK and Linux amd64 archive. Never create a second version-only commit or move a published tag.
+Run `scripts/bump-version.sh "fix: Describe the change" -- path/to/file` from `main`, listing only this iteration's files. It synchronizes the version, tests, lints, builds, signs, commits once, and pushes `main`. It does not create tags, publish to GitHub Releases, or install the APK.
 
-Keep only the current LocalBell release artifacts in `dist/`. Archive older LocalBell outputs outside `dist/` without moving unrelated files. When the configured phone is available through authorized Wi-Fi ADB, install the verified APK in place; a skipped or failed phone update does not block publication.
+Only Fred Junior decides when to run `scripts/publish-release.sh vX.Y.Z`. It tags the prepared commit and publishes its verified APK and Linux archive without rebuilding. Never move a tag or overwrite a public release. After confirming publication, it attempts to update the configured phone over Wi-Fi ADB; an unavailable phone or failed install does not invalidate the release.
+
+Keep only the current LocalBell artifacts in `dist/`. Retain previous verified builds under `.git/localbell-releases/` without moving unrelated files.
 
 ## Desktop conventions
 

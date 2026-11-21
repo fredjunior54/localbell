@@ -24,36 +24,6 @@ refresh_dist() {
     cp -- "$assets/localbell-$version.apk" "$assets/localbell-$version-linux-amd64.tar.gz" "$dist/"
 }
 
-install_wifi_apk() {
-    local apk=$1 sdk=$2 serial=${LOCALBELL_ADB_WIFI_DEVICE:-} adb listing attempt
-    if [[ -z $serial ]] && command -v fish >/dev/null; then
-        # shellcheck disable=SC2016
-        serial=$(fish -c 'printf "%s" "$LOCALBELL_ADB_WIFI_DEVICE"') || serial=''
-    fi
-    if [[ ! $serial =~ ^[A-Za-z0-9_-]+\._adb-tls-connect\._tcp\.?$ ]]; then
-        printf 'Wi-Fi APK install skipped: configure LOCALBELL_ADB_WIFI_DEVICE with the phone TLS serial.\n'
-        return 0
-    fi
-    adb=$(type -P adb) || adb=$sdk/platform-tools/adb
-    if [[ ! -x $adb ]] || ! command -v timeout >/dev/null; then
-        printf 'Wi-Fi APK install skipped: adb or timeout is unavailable.\n'
-        return 0
-    fi
-    for attempt in 1 2 3; do
-        if listing=$(timeout -k 2s 3s "$adb" devices -l) &&
-            awk -v serial="$serial" '$1 == serial && $2 == "device" { found = 1 } END { exit !found }' <<< "$listing"; then
-            if timeout -k 5s 90s "$adb" -s "$serial" install -r "$apk"; then
-                printf 'Installed the verified APK over Wi-Fi.\n'
-            else
-                printf 'Warning: Wi-Fi APK installation failed or timed out; continuing with the GitHub release.\n' >&2
-            fi
-            return 0
-        fi
-        if [[ $attempt != 3 ]]; then sleep 1; fi
-    done
-    printf 'Wi-Fi APK install skipped: the configured phone is not online and authorized.\n'
-}
-
 bump='patch'
 case ${1:-} in patch|minor|major) bump=$1; shift ;; esac
 [[ $# -ge 3 && $2 == -- ]] || usage
@@ -88,13 +58,12 @@ fi
 metadata=(app/app/build.gradle.kts packaging/arch/PKGBUILD packaging/arch/.SRCINFO server/Cargo.toml server/Cargo.lock README.md)
 for path in "${metadata[@]}"; do add_path "$path"; done
 
-for tool in gh make makepkg cargo java keytool file tar flock; do
+for tool in make makepkg cargo java keytool file tar flock sha256sum; do
     command -v "$tool" >/dev/null || fail "Missing tool: $tool"
 done
 remote_head=$(git ls-remote --exit-code origin refs/heads/main)
 [[ ${remote_head%%$'\t'*} == "$(git rev-parse refs/remotes/origin/main)" ]] || fail 'Fetch and review origin/main before releasing.'
 git merge-base --is-ancestor "${remote_head%%$'\t'*}" "$head" || fail 'Local main is behind origin.'
-gh auth status --hostname github.com >/dev/null 2>&1 || fail 'Authenticate GitHub CLI first.'
 
 read_version() { sed -nE 's/^[[:space:]]*versionName = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p'; }
 read_readme_version() { sed -nE 's@^<p align="center"><strong>Version ([0-9]+\.[0-9]+\.[0-9]+)</strong></p>$@\1@p'; }
@@ -209,12 +178,11 @@ expected_tree=$(GIT_INDEX_FILE=$index git write-tree)
 git add -A -- "${paths[@]}"
 git diff --cached --check -- "${paths[@]}"
 git commit --only -m "$subject" -- "${paths[@]}"
-[[ $(git rev-parse 'HEAD^{tree}') == "$expected_tree" ]] || fail 'Committed tree differs from the built tree; not tagging.'
-git tag -a "$tag" -m "Release $tag"
+[[ $(git rev-parse 'HEAD^{tree}') == "$expected_tree" ]] || fail 'Committed tree differs from the built tree.'
+git rev-parse HEAD > "$work/assets/commit"
+(cd "$work/assets" && sha256sum -- "localbell-$version.apk" "localbell-$version-linux-amd64.tar.gz" > SHA256SUMS)
 mv "$work/assets" "$release_dir/$tag"
 printf 'Verified release assets: %s/%s\n' "$release_dir" "$tag"
 refresh_dist "$root/dist" "$release_dir/$tag" "$release_dir" "$version"
-git push --atomic origin "HEAD:refs/heads/$branch" "refs/tags/$tag:refs/tags/$tag"
-install_wifi_apk "$release_dir/$tag/localbell-$version.apk" "$sdk"
-gh release create "$tag" --repo "$repo" --verify-tag --generate-notes \
-    "$release_dir/$tag/localbell-$version.apk" "$release_dir/$tag/localbell-$version-linux-amd64.tar.gz"
+git push origin "HEAD:refs/heads/$branch"
+printf 'Prepared %s. To publish manually: ./scripts/publish-release.sh %s\n' "$tag" "$tag"
