@@ -4,6 +4,27 @@ set -euo pipefail
 
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
+status() { printf '%s\n' "$*" >&2; }
+
+upload_asset() (
+    # Keep authorization out of curl's arguments and shell traces.
+    set +x
+    local endpoint=$1 path=$2 name=${2##*/} token response
+    token=$(gh auth token --hostname github.com) || fail 'Could not obtain GitHub CLI authorization.'
+    [[ -n $token && $token != *$'\n'* && $token != *$'\r'* ]] || fail 'Invalid GitHub authorization.'
+    local options=(--proto '=https' --connect-timeout 15 --max-time 1800
+        --fail --output /dev/null --write-out '%{http_code}' --request POST
+        --header @- --header 'Content-Type: application/octet-stream' --data-binary "@$path")
+    local headers="Authorization: Bearer $token"
+    # The two generated asset names need no URL escaping.
+    if [[ -t 2 ]]; then
+        response=$(curl -q --progress-bar "${options[@]}" "$endpoint?name=$name" <<< "$headers") || return 1
+    else
+        response=$(curl -q "${options[@]}" "$endpoint?name=$name" <<< "$headers" 2> >(tr '\r' '\n' >&2)) || return 1
+    fi
+    [[ $response == 201 ]]
+)
+
 install_wifi_apk() {
     local apk=$1 sdk=$2 serial=${LOCALBELL_ADB_WIFI_DEVICE:-} adb listing attempt
     if [[ -z $serial ]] && command -v fish >/dev/null; then
@@ -136,6 +157,9 @@ mkdir -p "$release_dir"
 exec 9>"$release_dir/lock"
 flock -n 9 || fail 'Another LocalBell build or publication is running.'
 
+for tool in gh jq curl; do
+    command -v "$tool" >/dev/null || fail "Missing tool: $tool"
+done
 gh auth status --hostname github.com >/dev/null 2>&1 || fail 'Authenticate GitHub CLI first.'
 find_release() {
     gh api --hostname github.com --paginate --slurp "repos/$repo/releases?per_page=100" |
@@ -200,6 +224,8 @@ if [[ ! -d $assets ]]; then
     jq -e '(.assets // []) | length == 0' <<< "$release" >/dev/null || fail 'Cannot rebuild an existing draft with uploaded assets; recover the retained build.'
     printf 'Building signed release artifacts for %s (%s).\n' "$tag" "$commit"
     build_release
+else
+    status "Reusing retained release artifacts for $tag."
 fi
 checksums=$(cd "$assets" && sha256sum -- "$apk" "$archive")
 [[ $checksums == "$(<"$assets/SHA256SUMS")" ]] || fail 'Retained artifacts do not match their checksums.'
@@ -210,12 +236,22 @@ refresh_dist "$PWD/dist" "$assets" "$release_dir" "$version"
 if [[ -z $remote ]] && ! git show-ref --verify --quiet "$ref"; then
     git tag -a "$tag" "$commit" -m "Release $tag"
 fi
-if [[ -z $remote ]]; then git push origin "$ref:$ref"; fi
+if [[ -z $remote ]]; then
+    status "Pushing tag $tag to GitHub."
+    git push origin "$ref:$ref"
+else
+    status "Tag $tag is already on GitHub."
+fi
 
 if [[ -z $id ]]; then
-    gh release create "$tag" --repo "$repo" --verify-tag --generate-notes --draft
-    release=$(find_release) || fail 'Could not identify the draft GitHub release.'
-    id=$(jq -er 'select(.draft == true) | .id' <<< "$release") || fail 'Expected a draft GitHub release.'
+    status "Creating a draft release for $tag."
+    release=$(gh api --hostname github.com --method POST "repos/$repo/releases" \
+        -f "tag_name=$tag" -f "target_commitish=$commit" -F draft=true -F generate_release_notes=true) ||
+        fail 'Could not create the GitHub release draft.'
+    id=$(jq -er --arg tag "$tag" 'select(.draft == true and .tag_name == $tag) | .id' <<< "$release") ||
+        fail 'GitHub did not return the requested release draft.'
+else
+    status "Resuming the draft release for $tag."
 fi
 [[ $id =~ ^[0-9]+$ ]] || fail 'Could not identify the GitHub release.'
 release_json() { gh api --hostname github.com "repos/$repo/releases/$id"; }
@@ -228,19 +264,29 @@ matching_assets() {
             ((.name == $apk and .digest == $apkDigest) or
              (.name == $linux and .digest == $linuxDigest)))' >/dev/null
 }
-release=$(release_json)
 matching_assets <<< "$release" || fail 'GitHub release metadata or assets do not match the prepared build.'
 if jq -e '.draft == true' <<< "$release" >/dev/null; then
+    endpoint="https://uploads.github.com/repos/$repo/releases/$id/assets"
+    advertised=$(jq -er '.upload_url' <<< "$release") || fail 'GitHub did not return an upload URL.'
+    [[ $advertised == "$endpoint{?name,label}" ]] || fail 'Unexpected GitHub release upload URL.'
     for file in "$apk" "$archive"; do
-        if ! jq -e --arg file "$file" 'any(.assets[]; .name == $file)' <<< "$release" >/dev/null; then
-            gh release upload "$tag" --repo "$repo" "$assets/$file"
+        if jq -e --arg file "$file" 'any(.assets[]; .name == $file)' <<< "$release" >/dev/null; then
+            status "Already uploaded and verified: $file."
+        else
+            status "Uploading $file ($(stat -c '%s' -- "$assets/$file") bytes). Waiting for GitHub confirmation after transfer."
+            upload_asset "$endpoint" "$assets/$file" ||
+                fail "GitHub did not confirm $file. Rerun the same command to check the draft and retry."
+            status "GitHub accepted $file."
         fi
     done
+    status 'Verifying both remote asset checksums.'
     release=$(release_json)
     matching_assets <<< "$release" || fail 'Uploaded assets do not match the prepared build.'
     jq -e '.assets | length == 2' <<< "$release" >/dev/null || fail 'Both assets must be uploaded before publication.'
-    gh release edit "$tag" --repo "$repo" --draft=false
+    status "Publishing $tag on GitHub."
+    gh api --hostname github.com --method PATCH "repos/$repo/releases/$id" -F draft=false >/dev/null
 fi
+status 'Checking the public release.'
 release=$(release_json)
 matching_assets <<< "$release" || fail 'Published assets do not match the prepared build.'
 jq -e '.draft == false and (.assets | length == 2)' <<< "$release" >/dev/null || fail 'Release is not public with both assets.'
@@ -251,4 +297,5 @@ if [[ -z $sdk ]] && command -v fish >/dev/null; then
     # shellcheck disable=SC2016
     sdk=$(fish -c 'printf "%s" "$ANDROID_HOME"') || sdk=''
 fi
+status 'Checking for the configured Wi-Fi ADB phone.'
 install_wifi_apk "$assets/$apk" "$sdk"
