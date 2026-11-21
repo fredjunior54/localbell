@@ -15,7 +15,7 @@ pub const ALPN: &[u8] = b"localbell/1";
 
 #[derive(Debug)]
 struct PinnedLeaf {
-    fingerprint: [u8; 32],
+    fingerprint: Option<[u8; 32]>,
     algorithms: WebPkiSupportedAlgorithms,
 }
 
@@ -28,7 +28,10 @@ impl ServerCertVerifier for PinnedLeaf {
         _: &[u8],
         _: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
-        if self.fingerprint.as_slice() != Sha256::digest(leaf.as_ref()).as_slice() {
+        if self
+            .fingerprint
+            .is_some_and(|expected| expected.as_slice() != Sha256::digest(leaf.as_ref()).as_slice())
+        {
             return Err(CertificateError::ApplicationVerificationFailure.into());
         }
         Ok(ServerCertVerified::assertion())
@@ -62,6 +65,27 @@ impl ServerCertVerifier for PinnedLeaf {
 pub async fn connect(
     address: SocketAddrV4,
     fingerprint: [u8; 32],
+) -> anyhow::Result<TlsStream<TcpStream>> {
+    dial(address, Some(fingerprint)).await
+}
+
+/// Start enrollment without a previously trusted leaf. Use only for comparison;
+/// never send saved credentials on this connection.
+pub async fn enroll(address: SocketAddrV4) -> anyhow::Result<(TlsStream<TcpStream>, [u8; 32])> {
+    let stream = dial(address, None).await?;
+    let leaf = stream
+        .get_ref()
+        .1
+        .peer_certificates()
+        .and_then(|chain| chain.first())
+        .ok_or_else(|| anyhow::anyhow!("Phone did not provide a certificate"))?;
+    let fingerprint = Sha256::digest(leaf.as_ref()).into();
+    Ok((stream, fingerprint))
+}
+
+async fn dial(
+    address: SocketAddrV4,
+    fingerprint: Option<[u8; 32]>,
 ) -> anyhow::Result<TlsStream<TcpStream>> {
     use anyhow::Context;
     let provider = rustls::crypto::ring::default_provider();

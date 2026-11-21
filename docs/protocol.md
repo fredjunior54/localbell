@@ -51,3 +51,17 @@ For enrollment, the desktop commits to its 32-byte challenge before receiving th
 - Comparison digest: `SHA-256(ASCII("localbell-session-compare-v1") || NUL || leaf || code || nonce || challenge)`.
 
 Interpret the first four comparison bytes as an unsigned big-endian number, reduce it modulo 1,000,000, and display it as six decimal digits. Keep the connection in enrollment mode until the commitment is verified and both users explicitly confirm. An enrollment connection must not receive notifications or an existing saved credential.
+
+Each session object has integer `v: 1` and string `type`. Enrollment and authenticated delivery use separate TLS connections:
+
+| Step | Desktop → Android | Android → Desktop |
+| --- | --- | --- |
+| Start enrollment | `pair_start` with `code`, `commitment` | `pair_nonce` with `nonce` |
+| Verify comparison | `pair_reveal` with `challenge` | `pair_approved` after local confirmation |
+| Persist new credential | `pair_finish` with a new `token`, after desktop confirmation | `paired` after writing the token digest |
+| Reconnect with the saved certificate pin | `authenticate` with `token` | `authenticated` or `rejected` |
+| Publish desktop readiness | `readiness` with boolean `ready` | — |
+| Deliver or dismiss | `ack` with the same `id` and boolean `accepted` | `notification` with `id` and `payload`, or `dismiss` with `id` and `key` |
+| Revoke | — | `revoked`, then close |
+
+The binary fields in enrollment and authentication use 64 lowercase hex characters. Linux records the new leaf pin and token before sending `pair_finish`. Android records the token digest before returning `paired` and does not overwrite an existing enrollment. A rejected enrollment can return `rejected` at any step. Request IDs start at 1 and increase within a session, up to `2^63-1`. The desktop must not acknowledge a repeated or decreasing ID as accepted. Notification payload fields match the delivery fields above. Do not log frame contents or pairing transcripts.
