@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,7 +38,16 @@ class MainScreenViewModel(
             false,
         )
 
-    val connectionState: StateFlow<HealthMonitor.ConnectionState> = healthMonitor.connectionState
+    val connectionState =
+        combine(settingsRepository.pairing, healthMonitor.readiness) { pairing, readiness ->
+                readiness.state.takeIf { pairing != null && readiness.token == pairing.token }
+                    ?: HealthMonitor.ConnectionState.DISCONNECTED
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                HealthMonitor.ConnectionState.DISCONNECTED,
+            )
 
     val serverUrl: StateFlow<String?> = healthMonitor.serverUrl
 
@@ -52,15 +63,10 @@ class MainScreenViewModel(
     val isBatteryOptimizationDisabled: StateFlow<Boolean> =
         _isBatteryOptimizationDisabled.asStateFlow()
 
-    private val _hasLocalNetworkPermission = MutableStateFlow(true)
-    val hasLocalNetworkPermission: StateFlow<Boolean> = _hasLocalNetworkPermission.asStateFlow()
-
-    val localNetworkRequested =
-        settingsRepository.localNetworkRequested.stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            false,
-        )
+    val savedEndpoint =
+        settingsRepository.pairing
+            .map { it?.url }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun updatePermissions(
         notificationAccess: Boolean,
@@ -70,20 +76,38 @@ class MainScreenViewModel(
         _isBatteryOptimizationDisabled.value = batteryOptDisabled
     }
 
-    fun setLocalNetworkPermission(granted: Boolean) {
-        val newlyGranted = granted && !_hasLocalNetworkPermission.value
-        _hasLocalNetworkPermission.value = granted
-        if (newlyGranted) {
-            healthMonitor.forceCheck()
+    fun refreshConnection() {
+        val message = _pairingUi.value.message
+        if (
+            message == R.string.pairing_network_settings ||
+                message == R.string.pairing_network_required
+        ) {
+            _pairingUi.value = PairingUi()
         }
+        healthMonitor.forceCheck()
     }
 
-    fun markLocalNetworkRequested() {
-        viewModelScope.launch { settingsRepository.setLocalNetworkRequested() }
+    fun showNetworkPermissionError(showSettings: Boolean) {
+        _pairingUi.value =
+            PairingUi(
+                message =
+                    if (showSettings) R.string.pairing_network_settings
+                    else R.string.pairing_network_required,
+            )
     }
 
     fun setServiceEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.setServiceEnabled(enabled) }
+        viewModelScope.launch {
+            val pairing = settingsRepository.pairing.first()
+            if (
+                !enabled ||
+                    (_hasNotificationAccess.value &&
+                        pairing != null &&
+                        healthMonitor.getServerUrlIfConnected(pairing.token) != null)
+            ) {
+                settingsRepository.setServiceEnabled(enabled)
+            }
+        }
     }
 
     internal data class PairingUi(

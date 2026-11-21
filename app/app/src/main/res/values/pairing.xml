@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="pairing_title">Connect to LocalBell</string>
+    <string name="pairing_title">Server configuration</string>
     <string name="pairing_address">IP address or hostname</string>
-    <string name="pairing_example" translatable="false">192.168.1.10:19420</string>
-    <string name="pairing_connect">Connect</string>
+    <string name="pairing_example" translatable="false">192.168.1.10</string>
+    <string name="pairing_connect">Pair</string>
     <string name="pairing_cancel">Cancel</string>
     <string name="pairing_connecting">Contacting the receiver…</string>
     <string name="pairing_compare">Check that Linux displays this same number. Confirm only if it matches.</string>
     <string name="pairing_match">Numbers match</string>
     <string name="pairing_waiting">Waiting for approval on Linux…</string>
-    <string name="pairing_invalid">Enter a valid address and optional port.</string>
+    <string name="pairing_invalid">Enter a valid IP address or hostname and a port from 1 to 65535.</string>
     <string name="pairing_timeout">The request expired. Connect again to retry.</string>
     <string name="pairing_rejected">The request was rejected or is no longer active.</string>
     <string name="pairing_busy">The receiver is already paired or has another pending request.</string>
@@ -19,4 +19,8 @@
     <string name="pairing_success">The receiver is paired.</string>
     <string name="pairing_configured">Tap to connect to a different receiver</string>
     <string name="pairing_enter_address">Tap to enter a server address</string>
+    <string name="pairing_port">Port</string>
+    <string name="pairing_network_required">Allow local network access to pair with this receiver.</string>
+    <string name="pairing_network_settings">Allow local network access in Android settings, then try again.</string>
+    <string name="pairing_open_settings">Open settings</string>
 </resources>

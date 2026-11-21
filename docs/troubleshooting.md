@@ -14,7 +14,7 @@ description: Fix common issues with LocalBell — server not starting, notificat
 
 **Pairing request does not appear**
 - Show the receiver window from the tray
-- Tap **Connect** after verifying the address and port on the phone
+- Open **Server Configuration** and tap **Pair** after verifying the address and port on the phone
 
 **Notifications don't appear on desktop**
 - Check if your desktop environment supports D-Bus notifications

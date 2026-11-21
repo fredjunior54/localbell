@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.5</strong></p>
+<p align="center"><strong>Version 1.4.6</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -27,8 +27,10 @@ Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a
 ## 🔔 How it works
 
 1. Open LocalBell on your Linux desktop.
-2. Enter the receiver address in LocalBell on Android and tap **Connect**. Compare the six-digit number on both screens. If it matches, tap **Numbers match** on Android and select **Accept** on Linux.
-3. Grant notification access on Android and enable forwarding. LocalBell delivers notifications to your desktop over the local network.
+2. Open **Server Configuration** on Android, enter the receiver address and port, and tap **Pair**. Compare the six-digit number on both screens. If it matches, tap **Numbers match** on Android and select **Accept** on Linux.
+3. Grant **Notification Access** on Android, then enable **Forwarding** once the receiver is connected. LocalBell delivers notifications to your desktop over the local network.
+
+On Android 17 or later, allow local network access if prompted while pairing.
 
 For an optional Tailscale connection, see the [setup guide](docs/getting-started.md#connect-over-tailscale). The same number check applies. The receiver stores its identity and paired-device credentials under `~/.config/localbell/` by default.
 

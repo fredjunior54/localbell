@@ -38,8 +38,6 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -57,6 +55,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,13 +92,11 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
     val isBatteryOptimizationDisabled by
         viewModel.isBatteryOptimizationDisabled.collectAsStateWithLifecycle()
     val blacklistedAppsCount by viewModel.blacklistedAppsCount.collectAsStateWithLifecycle()
-    val hasLocalNetworkPermission by
-        viewModel.hasLocalNetworkPermission.collectAsStateWithLifecycle()
-    val localNetworkRequested by viewModel.localNetworkRequested.collectAsStateWithLifecycle()
+    val savedEndpoint by viewModel.savedEndpoint.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
 
-    var showPairing by remember { mutableStateOf(false) }
-    var pairingPermissionRequested by remember { mutableStateOf(false) }
+    var showPairing by rememberSaveable { mutableStateOf(false) }
+    var pendingEndpoint by rememberSaveable { mutableStateOf<String?>(null) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showBlacklist by remember { mutableStateOf(false) }
 
@@ -111,14 +108,23 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
     val localNetworkPermissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted
             ->
-            viewModel.setLocalNetworkPermission(isGranted)
+            val requested = pendingEndpoint
+            pendingEndpoint = null
             if (isGranted) {
                 cancelLocalNetworkNotification(context)
-                if (pairingPermissionRequested) {
-                    showPairing = true
-                }
+                requested?.let(viewModel::pair)
+                viewModel.refreshConnection()
+            } else if (
+                requested != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN
+            ) {
+                val showSettings =
+                    activity != null &&
+                        !ActivityCompat.shouldShowRequestPermissionRationale(
+                            activity,
+                            Manifest.permission.ACCESS_LOCAL_NETWORK,
+                        )
+                viewModel.showNetworkPermissionError(showSettings)
             }
-            pairingPermissionRequested = false
         }
 
     // Check permissions when app resumes (lifecycle-aware, no polling!)
@@ -130,9 +136,9 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
                     batteryOptDisabled = isBatteryOptimizationDisabled(context),
                 )
                 val localNetworkGranted = !LocalNetworkPermission.isMissing(context)
-                viewModel.setLocalNetworkPermission(localNetworkGranted)
                 if (localNetworkGranted) {
                     cancelLocalNetworkNotification(context)
+                    viewModel.refreshConnection()
                 }
             }
         }
@@ -147,7 +153,22 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
 
     if (showPairing) {
         val pairing by viewModel.pairingUi.collectAsStateWithLifecycle()
-        PairingDialog(pairing, viewModel::pair, viewModel::confirmComparison) {
+        PairingDialog(
+            state = pairing,
+            savedEndpoint = savedEndpoint,
+            connect = { endpoint ->
+                if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN &&
+                        LocalNetworkPermission.isMissing(context)
+                ) {
+                    pendingEndpoint = endpoint
+                    localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                } else viewModel.pair(endpoint)
+            },
+            confirmComparison = viewModel::confirmComparison,
+            openSettings = { openAppSettings(context) },
+        ) {
+            pendingEndpoint = null
             viewModel.cancelPairing()
             showPairing = false
         }
@@ -216,18 +237,7 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
         isBatteryOptimizationDisabled = isBatteryOptimizationDisabled,
         onNotificationAccessClick = { openNotificationListenerSettings(context) },
         onBatteryOptimizationClick = { requestDisableBatteryOptimization(context) },
-        onServerConfigClick = {
-            if (
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN &&
-                    !hasLocalNetworkPermission
-            ) {
-                pairingPermissionRequested = true
-                viewModel.markLocalNetworkRequested()
-                localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
-            } else {
-                showPairing = true
-            }
-        },
+        onServerConfigClick = { showPairing = true },
         onServiceEnabledChange = { enabled ->
             if (enabled && !hasNotificationPermission(context)) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -237,24 +247,6 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
         onAboutClick = { showAboutDialog = true },
         onFilterClick = { showBlacklist = true },
         blacklistedAppsCount = blacklistedAppsCount,
-        showLocalNetwork = Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN,
-        hasLocalNetworkPermission = hasLocalNetworkPermission,
-        onLocalNetworkClick = {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) {
-                val permission = Manifest.permission.ACCESS_LOCAL_NETWORK
-                // After a permanent denial Android no longer shows the prompt
-                if (
-                    localNetworkRequested &&
-                        activity != null &&
-                        !ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
-                ) {
-                    openAppSettings(context)
-                } else {
-                    viewModel.markLocalNetworkRequested()
-                    localNetworkPermissionLauncher.launch(permission)
-                }
-            }
-        },
     )
 }
 
@@ -275,9 +267,6 @@ fun MainScreenContent(
     onAboutClick: () -> Unit,
     onFilterClick: () -> Unit,
     blacklistedAppsCount: Int = 0,
-    showLocalNetwork: Boolean = false,
-    hasLocalNetworkPermission: Boolean = true,
-    onLocalNetworkClick: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -315,19 +304,6 @@ fun MainScreenContent(
                 isOk = hasNotificationAccess,
                 onClick = onNotificationAccessClick,
             )
-
-            // Local Network (Android 17+)
-            if (showLocalNetwork) {
-                SettingRow(
-                    icon =
-                        if (hasLocalNetworkPermission) Icons.Default.Wifi
-                        else Icons.Default.WifiOff,
-                    title = "Local Network",
-                    subtitle = if (hasLocalNetworkPermission) "Allowed" else "Tap to allow",
-                    isOk = hasLocalNetworkPermission,
-                    onClick = onLocalNetworkClick,
-                )
-            }
 
             // Battery Optimization
             SettingRow(
@@ -463,9 +439,9 @@ fun MainScreenContent(
                                 when {
                                     !hasNotificationAccess -> "Grant access first"
                                     !isConfigured -> "Configure first"
-                                    !serviceEnabled -> "Disabled"
                                     connectionState != HealthMonitor.ConnectionState.CONNECTED ->
                                         "Waiting for server..."
+                                    !serviceEnabled -> "Disabled"
                                     else -> "Active"
                                 },
                             style = MaterialTheme.typography.bodySmall,
@@ -475,7 +451,10 @@ fun MainScreenContent(
                     Switch(
                         checked = serviceEnabled,
                         onCheckedChange = onServiceEnabledChange,
-                        enabled = hasNotificationAccess && isConfigured,
+                        enabled =
+                            hasNotificationAccess &&
+                                isConfigured &&
+                                connectionState == HealthMonitor.ConnectionState.CONNECTED,
                     )
                 }
             }

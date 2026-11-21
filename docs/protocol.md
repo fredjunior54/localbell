@@ -29,6 +29,8 @@ One request can be active for at most two minutes. The receiver allows five new 
 | `POST /v1/notification` | `key`, `app_name`, `title`, `message`, `urgency`, `timeout_ms` | `200`, `status: sent` |
 | `DELETE /v1/notification` | `key` | `200`, `status: dismissed` |
 
+Android treats the current pairing as ready only after pinned, authenticated health returns HTTP 200 with the JSON string `status: ready`. The app pauses forwarding when it next detects an unhealthy receiver and retains the forwarding preference across reconnects.
+
 All delivery requests require `Authorization: Bearer TOKEN`; invalid credentials return `401`. JSON bodies are limited to 32 KiB. Notification keys are scoped to the paired device. Urgency is 0–2; `timeout_ms` is `-1` for the desktop default, `0` for no timeout, or a positive number. Removal revokes the token across restarts. Identity and token digests remain under `$XDG_CONFIG_HOME/localbell/` (normally `~/.config/localbell/`).
 
 LAN mDNS advertises the `_localbell-v1._tcp.local.` service with fingerprint TXT key `fp`. This is only a hint for rediscovery: the app still verifies the saved TLS pin. Explicit overlay addresses and hostnames use their configured endpoint without mDNS fallback. The override does not advertise the overlay address via LAN mDNS.
