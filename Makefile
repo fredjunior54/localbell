@@ -1,4 +1,4 @@
-.PHONY: help build test test-server test-app up lint lint-server lint-app format format-server format-app rpm deb tarball clean
+.PHONY: help build test test-server test-app up lint lint-server lint-app format format-server format-app rpm deb tarball release-linux clean
 
 SERVER_DIR = server
 APP_DIR = app
@@ -26,7 +26,7 @@ test-app: ## Run Android app tests
 lint: lint-server lint-app ## Run all linters
 
 lint-server: ## Run server linter
-	@which golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@which golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	cd $(SERVER_DIR) && golangci-lint run
 
 lint-app: ## Run Android app linter
@@ -74,3 +74,8 @@ tarball: build ## Build binary tarball for AUR (linux-amd64)
 
 clean: ## Remove build artifacts
 	rm -rf bin/ dist/
+
+release-linux: ## Build the binary-only LocalBell Linux release archive
+	mkdir -p dist
+	cd $(SERVER_DIR) && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o ../dist/localbell ./cmd/lanotifica
+	tar -czf dist/localbell-linux-amd64.tar.gz -C dist localbell

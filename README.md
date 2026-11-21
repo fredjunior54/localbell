@@ -1,151 +1,103 @@
 <p align="center">
-  <img src="assets/lanotifica.png" width="400" alt="LaNotifica">
+  <img src="assets/lanotifica-512.png" width="160" alt="LocalBell icon">
 </p>
 
-<h1 align="center">LaNotifica</h1>
+<h1 align="center">LocalBell</h1>
+
+<p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
 <p align="center">
-  <strong>Forward Android notifications to your Linux desktop.</strong>
-</p>
-
-<p align="center">
-  <a href="https://github.com/alessandrolattao/lanotifica/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/alessandrolattao/lanotifica/ci.yml?style=for-the-badge&logo=github&label=CI" alt="CI">
+  <a href="https://github.com/fredjunior54/localbell/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/fredjunior54/localbell/ci.yml?style=for-the-badge&label=CI" alt="CI">
   </a>
-  <a href="https://play.google.com/store/apps/details?id=com.alessandrolattao.lanotifica">
-    <img src="https://img.shields.io/badge/Google_Play-Download-green?style=for-the-badge&logo=google-play" alt="Google Play">
-  </a>
-  <img src="https://img.shields.io/badge/Android-14+-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 14+">
-  <img src="https://img.shields.io/badge/Tested_on-Pixel_8_Pro-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Tested on Pixel 8 Pro">
-  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go">
-  <img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge" alt="AGPL-3.0 License">
+  <a href="https://github.com/fredjunior54/localbell/releases/latest">Download LocalBell</a>
 </p>
 
-<p align="center">
-  Your phone notifications, on your desktop.<br>
-  WhatsApp, Telegram, calls, everything.
-</p>
+Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a fork of **[LaNotifica](https://github.com/alessandrolattao/lanotifica)**, originally created by Alessandro Lattao.
 
----
+## 🔔 How it works
 
-## How it works
+1. Run LocalBell on your Linux desktop.
+2. Open `https://localhost:19420`, set a PIN if prompted, and scan the pairing QR code with the Android app.
+3. Grant notification access on Android and enable forwarding. LocalBell delivers notifications to your desktop over the local network.
 
-```
-┌──────────────┐      HTTPS/TLS       ┌──────────────┐
-│              │    Local Network     │              │
-│   Android    │ ──────────────────►  │    Linux     │
-│    Phone     │    mDNS Discovery    │   Desktop    │
-│              │                      │              │
-└──────────────┘                      └──────────────┘
-```
+## ✨ Features
 
-1. **Run the server** on your Linux machine
-2. **Scan the QR code** with the Android app
-3. **Done.** Notifications appear on your desktop
+- **No cloud relay:** Notifications travel directly from your phone to your desktop.
+- **Automatic discovery:** The app discovers the server over mDNS.
+- **Desktop integration:** Notifications appear through your desktop's D-Bus notification service.
 
----
+## 🚀 Quick start
 
-## Features
+### 🐧 Server (Linux)
 
-| | Feature | Description |
-|---|---|---|
-| 🔒 | **Zero cloud** | Everything stays on your local network |
-| 🔐 | **Encrypted** | TLS with auto-generated certificates |
-| ✨ | **Zero config** | mDNS auto-discovery, no IP addresses to type |
-| 🔋 | **Battery friendly** | Minimal impact on your phone |
-| 🐧 | **Works everywhere** | GNOME, KDE, XFCE, i3, Sway... |
+Download `localbell-linux-amd64.tar.gz` from [GitHub Releases](https://github.com/fredjunior54/localbell/releases/latest). From a terminal in your desktop session, extract and start it:
 
----
-
-## Quick Start
-
-### Server (Linux)
-
-**Fedora / RHEL 10 / CentOS Stream 10:**
 ```bash
-sudo dnf copr enable alessandrolattao/lanotifica
-sudo dnf install lanotifica
+tar -xzf localbell-linux-amd64.tar.gz
+./localbell
 ```
 
-**Arch Linux / Manjaro / EndeavourOS / CachyOS:**
-```bash
-yay -S lanotifica-bin
-# or: paru -S lanotifica-bin
-```
+Open `https://localhost:19420`. The server uses a self-signed certificate, so your browser may show a warning on first access.
 
-**Ubuntu / Debian:**
-```bash
-curl -sLO $(curl -s https://api.github.com/repos/alessandrolattao/lanotifica/releases/latest | grep -o 'https://[^"]*\.deb') && sudo dpkg -i lanotifica_*.deb && rm lanotifica_*.deb
-```
+### 📱 App (Android)
 
-**Start the server:**
-```bash
-systemctl --user enable --now lanotifica
-```
+Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. LocalBell can coexist with LaNotifica; pair it separately after installation.
 
-Then open `https://localhost:19420` and scan the QR code.
-
-### App (Android)
-
-<a href="https://play.google.com/store/apps/details?id=com.alessandrolattao.lanotifica">
-  <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="80">
-</a>
-
-Or build from source in `app/`.
-
----
-
-## Requirements
+## 📋 Requirements
 
 | Component | Requirement |
 |-----------|-------------|
-| **Server** | Linux with D-Bus notifications (any modern desktop) |
-| **App** | Android 14+ (API 34) |
+| **Server** | Linux x86-64 with a D-Bus desktop notification service |
+| **App** | Android 14 or later (API 34+) |
 | **Network** | Both devices on the same local network |
 
----
+## 🔒 Security
 
-## Security
+- **TLS** encrypts notifications in transit. The Android app pins the certificate fingerprint from the pairing QR code.
+- **Token authentication** protects the notification endpoint. Pairing is PIN-protected.
 
-- **Token-based authentication** — Unique token generated on setup
-- **Certificate pinning** — Fingerprint verified via QR code
-- **End-to-end encryption** — All traffic over TLS
-- **LAN only** — Never leaves your local network
+## 🛠️ Development
 
----
+### 📦 Prerequisites
 
-## Development
+- Go 1.27.1 or later, GNU Make, and `golangci-lint` v2
+- JDK 21 or later supported by the Gradle wrapper, and Android SDK Platform 37
+- For local releases: Android SDK Build Tools, Arch `makepkg`, and GitHub CLI authenticated as a repository maintainer
 
-### Prerequisites
+### ⚙️ Setup
 
-- Go 1.27.1+ (for the server)
-- Android SDK with compileSdk 37 (for the app)
-- Java 21+ (for Gradle)
-- [Lefthook](https://github.com/evilmartians/lefthook) for pre-push git hooks
+Set `ANDROID_HOME` to your installed SDK. Optionally install the repository's pre-push checks with `lefthook install` if your local JDK matches the hook configuration.
 
-### Setup
+### 🧪 Build and test
 
 ```bash
-# Install lefthook (requires Go)
-go install github.com/evilmartians/lefthook@latest
-
-# Install git hooks
-lefthook install
+make build        # Build the development server
+make test         # Run Go and Android tests
+make lint         # Run Go and Android linters
+make format       # Format Go and Kotlin code
 ```
 
-Lefthook runs `golangci-lint`, `detekt`, `spotless`, and all tests automatically before every `git push`.
+### 🏷️ Publish a release
 
-### Build and test
+On the release machine, `ANDROID_SIGNING_DIR` must contain exactly one `.p12`, `.jks`, or `.keystore`. Supply the store password via the environment or a private `release-password` file in that directory. Set `KEY_ALIAS` if the store has multiple private keys and `KEY_PASSWORD` if the key password differs from the store password. Keep the signing material outside Git.
+
+On `main`, run the release script with a commit subject and the files for that iteration:
 
 ```bash
-make build        # build Go server binary
-make test         # run all tests (server + app)
-make lint         # run all linters (server + app + detekt + spotless)
-make format       # auto-format all code
+./scripts/bump-version.sh "docs: Clarify Linux installation" -- README.md
 ```
 
----
+The default bump is **patch**. Only Fred Junior can authorize an explicit `minor` or `major` bump. The script tests and builds locally, commits the selected changes with the synchronized version, pushes the branch and annotated tag, and publishes the signed APK and Linux archive to GitHub Releases. GitHub Actions only runs CI.
 
-## License
+If the tag was pushed but release creation failed, retry with the same tag and the verified assets retained under `.git/localbell-releases/vX.Y.Z/`. Do not bump the version or move the tag:
 
-AGPL-3.0
+```bash
+gh release create vX.Y.Z --repo fredjunior54/localbell --verify-tag --generate-notes \
+  .git/localbell-releases/vX.Y.Z/localbell-X.Y.Z.apk \
+  .git/localbell-releases/vX.Y.Z/localbell-linux-amd64.tar.gz
+```
+
+## 📄 License
+
+[AGPL-3.0](LICENSE)

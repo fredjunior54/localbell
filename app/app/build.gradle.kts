@@ -9,22 +9,22 @@ android {
 
     signingConfigs {
         create("release") {
-            val keystoreFile = file("lanotifica-release.jks")
-            if (keystoreFile.exists()) {
-                storeFile = keystoreFile
+            val keystorePath = System.getenv("LOCALBELL_KEYSTORE")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-                keyAlias = System.getenv("KEY_ALIAS") ?: "lanotifica"
+                keyAlias = System.getenv("KEY_ALIAS") ?: ""
                 keyPassword = System.getenv("KEY_PASSWORD") ?: ""
             }
         }
     }
 
     defaultConfig {
-        applicationId = "com.alessandrolattao.lanotifica"
+        applicationId = "io.github.fredjunior54.localbell"
         minSdk = 34
         targetSdk = 37
-        versionCode = 21
-        versionName = "1.3.3"
+        versionCode = 22
+        versionName = "1.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

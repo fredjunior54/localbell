@@ -1,12 +1,14 @@
-// Package main is the entry point for the LaNotifica server.
+// Package main is the entry point for the LocalBell server.
 package main
 
 import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -21,6 +23,11 @@ import (
 var Version = "dev"
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Println(Version)
+		return
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
@@ -74,7 +81,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Printf("LaNotifica server started on port %s", cfg.Port)
+		log.Printf("LocalBell server started on port %s", cfg.Port)
 		log.Printf("Open https://localhost%s in your browser to see the QR code", cfg.Port)
 		if err := server.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server error: %v", err)

@@ -176,18 +176,18 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
                 ) {
                     Image(
                         painter = painterResource(R.drawable.app_logo),
-                        contentDescription = "LaNotifica",
+                        contentDescription = "LocalBell",
                         modifier = Modifier.size(240.dp),
                     )
                     Spacer(modifier = Modifier.size(12.dp))
-                    Text("LaNotifica")
+                    Text("LocalBell")
                 }
             },
             text = {
                 Column {
                     Text(
                         "Forward notifications from your Android device to your Linux desktop.\n\n" +
-                            "To get started, install and run the LaNotifica server on your computer. " +
+                            "To get started, install and run the LocalBell server on your computer. " +
                             "The website explains how.",
                     )
                     Spacer(modifier = Modifier.size(16.dp))
@@ -287,7 +287,7 @@ fun MainScreenContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("LaNotifica") },
+                title = { Text("LocalBell") },
                 actions = {
                     IconButton(onClick = onAboutClick) {
                         Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "About")

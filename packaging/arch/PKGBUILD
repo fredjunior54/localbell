@@ -1,10 +1,11 @@
-# Maintainer: Alessandro Lattao <alessandro@lattao.com>
+# Maintainer: Fred Junior <https://github.com/fredjunior54>
+# Original packaging: Alessandro Lattao
 pkgname=lanotifica-bin
-pkgver=1.3.3
+pkgver=1.3.4
 pkgrel=1
 pkgdesc="Forward Android push notifications to your Linux desktop via D-Bus"
 arch=('x86_64')
-url="https://github.com/alessandrolattao/lanotifica"
+url="https://github.com/fredjunior54/localbell"
 license=('AGPL-3.0-only')
 depends=('dbus')
 optdepends=('libnotify: desktop notification daemon interaction'
@@ -14,10 +15,11 @@ provides=("lanotifica=$pkgver")
 conflicts=('lanotifica')
 install=lanotifica.install
 # sha256sums must be updated on each release: run updpkgsums or makepkg -g
-source=("lanotifica-${pkgver}-linux-amd64.tar.gz::https://github.com/alessandrolattao/lanotifica/releases/download/v${pkgver}/lanotifica-linux-amd64.tar.gz")
-sha256sums=('SKIP')
+source=("localbell-${pkgver}-linux-amd64.tar.gz::${url}/releases/download/v${pkgver}/localbell-linux-amd64.tar.gz"
+        "lanotifica-${pkgver}.service::${url}/raw/refs/tags/v${pkgver}/packaging/lanotifica.service")
+sha256sums=('SKIP' 'SKIP')
 
 package() {
-    install -Dm755 "${srcdir}/lanotifica" "${pkgdir}/usr/bin/lanotifica"
-    install -Dm644 "${srcdir}/lanotifica.service" "${pkgdir}/usr/lib/systemd/user/lanotifica.service"
+    install -Dm755 "${srcdir}/localbell" "${pkgdir}/usr/bin/lanotifica"
+    install -Dm644 "${srcdir}/lanotifica-${pkgver}.service" "${pkgdir}/usr/lib/systemd/user/lanotifica.service"
 }

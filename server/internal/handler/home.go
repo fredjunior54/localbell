@@ -123,7 +123,7 @@ var setupTemplate = template.Must(template.New("setup").Parse(`<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LaNotifica — Set PIN</title>
+    <title>LocalBell — Set PIN</title>
     <link rel="icon" type="image/png" href="/favicon.png">
 ` + sharedStyle + `
 </head>
@@ -146,13 +146,13 @@ var loginTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LaNotifica — Login</title>
+    <title>LocalBell — Login</title>
     <link rel="icon" type="image/png" href="/favicon.png">
 ` + sharedStyle + `
 </head>
 <body>
     <div class="card">
-        <h1>LaNotifica</h1>
+        <h1>LocalBell</h1>
         <p class="sub">Enter your PIN to access this page</p>
         {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
         <form method="POST" action="/">
@@ -169,7 +169,7 @@ var homeTemplate = template.Must(template.New("home").Parse(`<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LaNotifica</title>
+    <title>LocalBell</title>
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -323,18 +323,18 @@ var homeTemplate = template.Must(template.New("home").Parse(`<!DOCTYPE html>
             <div class="qr-wrapper">
                 <img src="data:image/png;base64,{{.QRCode}}" alt="QR Code">
             </div>
-            <p class="qr-hint">Scan with LaNotifica app</p>
+            <p class="qr-hint">Scan with LocalBell app</p>
         </div>
 
         <div class="content">
             <div class="header">
-                <img src="data:image/png;base64,{{.Logo}}" alt="LaNotifica">
-                <h1>LaNotifica</h1>
+                <img src="data:image/png;base64,{{.Logo}}" alt="LocalBell">
+                <h1>LocalBell</h1>
             </div>
             <p class="tagline">Forward Android notifications to your Linux desktop</p>
 
             <ol class="steps">
-                <li><span>Install <strong>LaNotifica</strong> from <a href="https://play.google.com/store/apps/details?id=com.alessandrolattao.lanotifica" target="_blank">Google Play</a></span></li>
+                <li><span>Install <strong>LocalBell</strong> from <a href="https://github.com/fredjunior54/localbell/releases/latest" target="_blank">GitHub Releases</a></span></li>
                 <li><span>Open the app and tap <strong>Scan QR Code</strong></span></li>
                 <li><span>Grant <strong>Notification Access</strong> permission</span></li>
                 <li><span>Disable <strong>Battery Optimization</strong></span></li>

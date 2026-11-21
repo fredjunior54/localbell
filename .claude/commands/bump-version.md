@@ -1,49 +1,14 @@
 ---
 name: bump-version
-description: Use when bumping the version number for a new release. Covers all three sync points that must stay in sync.
+description: Synchronize version metadata and publish a LocalBell release.
 ---
 
 # Bump Version
 
-Three files must always be in sync. Touch all three in the same commit.
-
-## The three sync points
-
-| File | What to change |
-|------|---------------|
-| `app/app/build.gradle.kts` | `versionName` (e.g. `"1.2.0"`) AND `versionCode` (monotone integer, always +1) |
-| `packaging/rpm/lanotifica.spec` | Must use `%{pkg_version}` — NEVER hardcode. If it's hardcoded, fix it. |
-| `server/cmd/lanotifica/main.go` or `main` package constant | `Version` constant |
-
-## The fast way — use the script
+End every iteration that changes project files with one patch release. Only Fred Junior may authorize an explicit `minor` or `major` bump. Do not release a no-op iteration.
 
 ```bash
-./scripts/bump-version.sh X.Y.Z
+./scripts/bump-version.sh "fix: Describe the change" -- path/to/changed-file
 ```
 
-The script bumps `build.gradle.kts` (versionCode +1, versionName), verifies the RPM spec uses `%{pkg_version}`, updates `packaging/arch/PKGBUILD`, and commits everything automatically.
-
-## Manual steps (if needed)
-
-1. Decide the new version (semver: MAJOR.MINOR.PATCH)
-2. Determine new `versionCode` = current + 1 (check `build.gradle.kts`)
-3. Edit `app/app/build.gradle.kts`: update both `versionCode` and `versionName`
-4. Verify `packaging/rpm/lanotifica.spec` uses `%{pkg_version}` (fix if not)
-5. Update `Version` in Go main package if there's a constant
-6. Update `pkgver` in `packaging/arch/PKGBUILD`
-7. Commit all files together: `chore: bump version to vX.Y.Z`
-
-## Common mistakes to avoid
-
-- **Never bump `versionCode` without bumping `versionName`** — Play Store rejects it
-- **Never reuse a `versionCode`** — Play Store rejects it permanently for that code
-- **Never hardcode version in RPM spec** — COPR build will use the wrong version
-- **Never push a tag before CI is green** — fix the build first, then tag
-
-## Checking current versions
-
-```bash
-grep versionCode app/app/build.gradle.kts
-grep versionName app/app/build.gradle.kts
-grep ^Version: packaging/rpm/lanotifica.spec
-```
+The script uses Gradle's `versionName` as the baseline, increments Android `versionCode`, updates Arch `pkgver` and `.SRCINFO`, and supplies the version to the Go build and Git tag. RPM and DEB templates keep their dynamic version placeholders. Do not edit these values manually before running the script.

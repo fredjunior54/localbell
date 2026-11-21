@@ -20,6 +20,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LaNotifica"
+rootProject.name = "LocalBell"
 
 include(":app")

@@ -25,7 +25,7 @@ class LaNotificaApp : Application() {
                     NotificationManager.IMPORTANCE_LOW,
                 )
                 .apply {
-                    description = "Shows when LaNotifica is forwarding notifications"
+                    description = "Shows when LocalBell is forwarding notifications"
                     setShowBadge(false)
                 }
 

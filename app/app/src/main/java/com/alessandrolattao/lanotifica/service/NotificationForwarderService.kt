@@ -267,8 +267,8 @@ class NotificationForwarderService : NotificationListenerService() {
             )
         val notification =
             NotificationCompat.Builder(this, LaNotificaApp.CHANNEL_ID)
-                .setContentTitle("LaNotifica")
-                .setContentText("Open LaNotifica to allow local network access")
+                .setContentTitle("LocalBell")
+                .setContentText("Open LocalBell to allow local network access")
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
@@ -286,7 +286,7 @@ class NotificationForwarderService : NotificationListenerService() {
             )
 
         return NotificationCompat.Builder(this, LaNotificaApp.CHANNEL_ID)
-            .setContentTitle("LaNotifica")
+            .setContentTitle("LocalBell")
             .setContentText("Forwarding notifications...")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
