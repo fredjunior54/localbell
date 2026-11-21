@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.3.6</strong></p>
+<p align="center"><strong>Version 1.3.7</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -100,6 +100,16 @@ On `main`, run the release script with a commit subject and the files for that i
 ```
 
 The default bump is **patch**. Only Fred Junior can authorize an explicit `minor` or `major` bump. The script tests and builds locally, commits the selected changes with the synchronized version, pushes the branch and annotated tag, and publishes the signed APK and Linux archive to GitHub Releases. GitHub Actions only runs CI.
+
+After verification, `dist/` holds the current signed APK and Linux archive. Previous LocalBell outputs are moved under `.git/localbell-releases/`; unrelated files stay in `dist/`.
+
+To automatically update an already-paired phone over Wi-Fi, run `adb devices -l` while the phone is online. Copy its exact serial ending in `._adb-tls-connect._tcp`, then save it once in fish (replace the example serial):
+
+```fish
+set -Ux LOCALBELL_ADB_WIFI_DEVICE 'adb-EXAMPLE._adb-tls-connect._tcp'
+```
+
+The release script updates only that phone, without clearing its app data. If the phone is unavailable or installation fails, the GitHub release still proceeds.
 
 If the tag was pushed but release creation failed, retry with the same tag and the verified assets retained under `.git/localbell-releases/vX.Y.Z/`. Do not bump the version or move the tag:
 

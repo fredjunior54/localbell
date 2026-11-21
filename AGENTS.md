@@ -27,6 +27,8 @@ End every iteration that changes project files with one patch release. Do not re
 
 Run `scripts/bump-version.sh "fix: Describe the change" -- path/to/file` from `main`, listing only the files for that iteration. The script synchronizes Gradle, Arch packaging metadata, the Cargo package and desktop binary versions, and the Git tag; tests, lints, and builds locally; commits once; pushes `main` and the tag; and publishes the signed APK and Linux amd64 archive. Never create a second version-only commit or move a published tag.
 
+Keep only the current LocalBell release artifacts in `dist/`. Archive older LocalBell outputs outside `dist/` without moving unrelated files. When the configured phone is available through authorized Wi-Fi ADB, install the verified APK in place; a skipped or failed phone update does not block publication.
+
 ## Desktop conventions
 
 - Run `cargo fmt` and Clippy before finishing Rust changes.

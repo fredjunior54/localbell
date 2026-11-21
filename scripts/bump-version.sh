@@ -5,6 +5,55 @@ set -euo pipefail
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 usage() { fail 'Usage: scripts/bump-version.sh [patch|minor|major] "type: summary" -- path [path ...]'; }
 
+refresh_dist() {
+    local dist=$1 assets=$2 history=$3 version=$4 entry archive
+    local managed='^localbell(-[0-9]+\.[0-9]+\.[0-9]+(\.apk|-linux-amd64\.tar\.gz)|-linux-amd64\.tar\.gz|-migration-test\.apk)?$'
+    [[ ! -L $dist ]] || fail 'Refusing to update a symlinked dist directory.'
+    mkdir -p -- "$dist"
+    local old=()
+    for entry in "$dist"/*; do
+        [[ ${entry##*/} =~ $managed ]] || continue
+        [[ -f $entry && ! -L $entry ]] || fail "Refusing to move unexpected dist entry: $entry"
+        old+=("$entry")
+    done
+    if ((${#old[@]})); then
+        archive=$(mktemp -d "$history/previous-dist.XXXXXXXX")
+        mv -- "${old[@]}" "$archive/"
+        printf 'Previous local outputs moved to: %s\n' "$archive"
+    fi
+    cp -- "$assets/localbell-$version.apk" "$assets/localbell-$version-linux-amd64.tar.gz" "$dist/"
+}
+
+install_wifi_apk() {
+    local apk=$1 sdk=$2 serial=${LOCALBELL_ADB_WIFI_DEVICE:-} adb listing attempt
+    if [[ -z $serial ]] && command -v fish >/dev/null; then
+        # shellcheck disable=SC2016
+        serial=$(fish -c 'printf "%s" "$LOCALBELL_ADB_WIFI_DEVICE"') || serial=''
+    fi
+    if [[ ! $serial =~ ^[A-Za-z0-9_-]+\._adb-tls-connect\._tcp\.?$ ]]; then
+        printf 'Wi-Fi APK install skipped: configure LOCALBELL_ADB_WIFI_DEVICE with the phone TLS serial.\n'
+        return 0
+    fi
+    adb=$(type -P adb) || adb=$sdk/platform-tools/adb
+    if [[ ! -x $adb ]] || ! command -v timeout >/dev/null; then
+        printf 'Wi-Fi APK install skipped: adb or timeout is unavailable.\n'
+        return 0
+    fi
+    for attempt in 1 2 3; do
+        if listing=$(timeout -k 2s 3s "$adb" devices -l) &&
+            awk -v serial="$serial" '$1 == serial && $2 == "device" { found = 1 } END { exit !found }' <<< "$listing"; then
+            if timeout -k 5s 90s "$adb" -s "$serial" install -r "$apk"; then
+                printf 'Installed the verified APK over Wi-Fi.\n'
+            else
+                printf 'Warning: Wi-Fi APK installation failed or timed out; continuing with the GitHub release.\n' >&2
+            fi
+            return 0
+        fi
+        if [[ $attempt != 3 ]]; then sleep 1; fi
+    done
+    printf 'Wi-Fi APK install skipped: the configured phone is not online and authorized.\n'
+}
+
 bump='patch'
 case ${1:-} in patch|minor|major) bump=$1; shift ;; esac
 [[ $# -ge 3 && $2 == -- ]] || usage
@@ -164,6 +213,8 @@ git commit --only -m "$subject" -- "${paths[@]}"
 git tag -a "$tag" -m "Release $tag"
 mv "$work/assets" "$release_dir/$tag"
 printf 'Verified release assets: %s/%s\n' "$release_dir" "$tag"
+refresh_dist "$root/dist" "$release_dir/$tag" "$release_dir" "$version"
 git push --atomic origin "HEAD:refs/heads/$branch" "refs/tags/$tag:refs/tags/$tag"
+install_wifi_apk "$release_dir/$tag/localbell-$version.apk" "$sdk"
 gh release create "$tag" --repo "$repo" --verify-tag --generate-notes \
     "$release_dir/$tag/localbell-$version.apk" "$release_dir/$tag/localbell-$version-linux-amd64.tar.gz"
