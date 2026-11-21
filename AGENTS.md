@@ -25,6 +25,10 @@ make test-app        # gradle test
 make lint-app        # gradle lint + spotless
 ```
 
+### Android build cleanup
+
+For one-off builds, tests, and lint, prefer `--no-daemon` and `-Pkotlin.compiler.execution.strategy=in-process` when running Gradle directly. After Android work, including failed runs, check for idle Gradle and Kotlin daemons left by this checkout. Use `cd app && ./gradlew --status` to verify that no same-version builds are active before running `./gradlew --stop` from `app/`. If a Kotlin daemon from this run remains, verify its PID and ownership before sending it `SIGTERM`. Do not stop unrelated Java processes or reset swap.
+
 ## Versioning — CRITICAL
 
 End every iteration that changes project files with one patch bump. Do not bump a no-op iteration. Only Fred Junior may authorize a major or minor bump.
