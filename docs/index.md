@@ -28,7 +28,7 @@ LocalBell is a simple tool that sends your phone notifications directly to your 
 
 1. Install the server on your Linux machine
 2. Open the app on your Android phone
-3. Enter the receiver address on Android, compare the words, and approve on Linux
+3. Enter the receiver address on Android, compare the six-digit number, confirm on Android, and approve on Linux
 4. Done — notifications appear on your desktop
 
 The server and app find each other automatically using mDNS. All communication is encrypted with TLS.

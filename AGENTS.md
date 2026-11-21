@@ -4,9 +4,9 @@
 
 LocalBell forwards Android push notifications to a Linux desktop via D-Bus.
 - `server/`: Rust/egui Linux desktop receiver, HTTPS API, mDNS discovery, and D-Bus notifications.
-- `app/`: Android notification capture, QR pairing, and certificate-pinned HTTPS delivery.
+- `app/`: Android notification capture, address-based pairing, and certificate-pinned HTTPS delivery.
 
-Pair from the desktop window with a temporary, single-use QR code. The tray hides or shows the window; Quit stops the receiver. The versioned LAN protocol is documented in `docs/protocol.md`.
+Enter the receiver address on Android, compare the six-digit number, confirm on Android, and accept on Linux. Use private LAN IPv4 by default or explicitly bind a Tailscale IPv4 address with `--listen=IP`. Existing saved pairings continue to work. The tray hides or shows the window; Quit stops the receiver. The versioned LAN protocol is documented in `docs/protocol.md`.
 
 ## Android design
 
@@ -39,7 +39,7 @@ Keep only the current LocalBell artifacts in `dist/`. Retain previous verified b
 
 - Run `cargo fmt` and Clippy before finishing Rust changes.
 - Use injectable notification sinks in tests; do not send notifications to the live desktop.
-- Keep identity and paired-device configuration in the LocalBell XDG config directory. Do not log notification bodies, pairing codes, or tokens.
+- Keep identity and paired-device configuration in the LocalBell XDG config directory. Do not log notification bodies, pairing secrets, comparison numbers, or tokens.
 
 ## CI / CD
 

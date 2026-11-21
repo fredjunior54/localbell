@@ -28,6 +28,7 @@ import io.github.fredjunior54.localbell.ui.theme.spacing
 internal fun PairingDialog(
     state: MainScreenViewModel.PairingUi,
     connect: (String) -> Unit,
+    confirmComparison: () -> Unit,
     close: () -> Unit,
 ) {
     var address by rememberSaveable { mutableStateOf("") }
@@ -52,12 +53,17 @@ internal fun PairingDialog(
                     )
                 if (state.busy) {
                     LinearProgressIndicator()
-                    val phrase = state.phrase
+                    val comparison = state.comparison
                     Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-                        if (phrase == null) Text(stringResource(R.string.pairing_connecting))
+                        if (comparison == null) Text(stringResource(R.string.pairing_connecting))
                         else {
-                            Text(stringResource(R.string.pairing_compare))
-                            Text(phrase, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                stringResource(
+                                    if (state.confirmed) R.string.pairing_waiting
+                                    else R.string.pairing_compare,
+                                ),
+                            )
+                            Text(comparison, style = MaterialTheme.typography.titleMedium)
                         }
                     }
                 }
@@ -74,7 +80,11 @@ internal fun PairingDialog(
         },
         confirmButton = {
             if (success) TextButton(onClick = close) { Text(stringResource(R.string.about_close)) }
-            else
+            else if (state.comparison != null) {
+                Button(onClick = confirmComparison, enabled = !state.confirmed) {
+                    Text(stringResource(R.string.pairing_match))
+                }
+            } else
                 Button(
                     onClick = { connect(address) },
                     enabled = !state.busy && address.isNotBlank(),

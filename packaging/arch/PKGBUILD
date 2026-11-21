@@ -1,7 +1,7 @@
 # Maintainer: Fred Junior <https://github.com/fredjunior54>
 # Original packaging: Alessandro Lattao
 pkgname=localbell-bin
-pkgver=1.4.1
+pkgver=1.4.2
 pkgrel=1
 pkgdesc="Forward Android push notifications to your Linux desktop via D-Bus"
 arch=('x86_64')

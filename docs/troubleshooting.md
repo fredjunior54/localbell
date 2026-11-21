@@ -22,9 +22,9 @@ description: Fix common issues with LocalBell — server not starting, notificat
 
 ## App Issues
 
-**Pairing words do not match**
+**Pairing numbers do not match**
 - Select **Reject** and verify the receiver address
-- Never approve a request unless all words match in order
+- Never approve a request unless both displays show the same six digits
 
 **App doesn't connect to server**
 - Verify both devices are on the same network

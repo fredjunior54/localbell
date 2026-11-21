@@ -22,7 +22,6 @@ type Shared = Arc<Mutex<state::State>>;
 #[derive(Default)]
 struct Network {
     ip: Option<Ipv4Addr>,
-    fingerprint: String,
     message: String,
 }
 
@@ -50,7 +49,7 @@ async fn receiver(
     };
     let short = &fingerprint[..16];
     let name = format!("LocalBell-{short}");
-    let app = api::router(state.clone(), api::DesktopSink);
+    let app = api::router(state.clone(), api::DesktopSink, fingerprint.clone());
     loop {
         let Some(ip) = listen.or_else(lan) else {
             if let Ok(mut status) = status.lock() {
@@ -83,7 +82,6 @@ async fn receiver(
         if let Ok(mut status) = status.lock() {
             *status = Network {
                 ip: Some(ip),
-                fingerprint: fingerprint.clone(),
                 message: if discovery {
                     format!("Listening on {ip}:{PORT}")
                 } else {

@@ -16,7 +16,7 @@ LocalBell is designed with privacy and security as core principles:
 
 ## Authentication
 
-The phone and receiver display the same certificate-bound phrase. After the user compares it and approves on Linux, Android registers a per-device bearer token over pinned HTTPS. The receiver can revoke that token without affecting other devices.
+The phone and receiver display the same certificate-bound six-digit number. After the user confirms it on Android and approves on Linux, Android registers a per-device bearer token over pinned HTTPS. The receiver can revoke that token without affecting other devices.
 
 The token is stored securely on both the server and the app.
 
@@ -24,7 +24,7 @@ The token is stored securely on both the server and the app.
 
 All communication between the app and server uses HTTPS with TLS 1.3.
 
-The server generates a self-signed certificate on first startup. The phone pins the certificate authenticated by comparing the words on both devices.
+The server generates a self-signed certificate on first startup. The phone pins the certificate authenticated by comparing the number on both devices.
 
 ## Certificate Pinning
 

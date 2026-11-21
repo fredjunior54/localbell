@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.1</strong></p>
+<p align="center"><strong>Version 1.4.2</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -27,10 +27,10 @@ Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a
 ## 🔔 How it works
 
 1. Open LocalBell on your Linux desktop.
-2. Enter the receiver address in LocalBell on Android and tap **Connect**. Compare all ten words on both screens, then select **Accept** on Linux only if they match.
+2. Enter the receiver address in LocalBell on Android and tap **Connect**. Compare the six-digit number on both screens. If it matches, tap **Numbers match** on Android and select **Accept** on Linux.
 3. Grant notification access on Android and enable forwarding. LocalBell delivers notifications to your desktop over the local network.
 
-For an optional Tailscale connection, see the [setup guide](docs/getting-started.md#connect-over-tailscale). The same phrase check applies. The receiver stores its identity and paired-device credentials under `~/.config/localbell/` by default.
+For an optional Tailscale connection, see the [setup guide](docs/getting-started.md#connect-over-tailscale). The same number check applies. The receiver stores its identity and paired-device credentials under `~/.config/localbell/` by default.
 
 ## ✨ Features
 
@@ -63,12 +63,12 @@ Download and install `localbell-X.Y.Z.apk` from the same release. Android may as
 | ----------- | ------------------------------------------------------------------------------------ |
 | **Server**  | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
 | **App**     | Android 14 or later (API 34+)                                                        |
-| **Network** | Both devices on the same local network                                               |
+| **Network** | Both devices reachable on the same LAN or tailnet                                               |
 
 ## 🔒 Security
 
-- **TLS** encrypts notifications in transit. The Android app pins the certificate verified by the pairing phrase.
-- A pairing request expires after two minutes. Only one new phone can be paired at a time. Remove a phone in the desktop window to revoke its credential. No PIN or account is required.
+- **TLS** encrypts notifications in transit. The Android app pins the certificate verified during the numeric comparison.
+- A pairing request expires after two minutes. Only one new phone can be paired at a time. Remove a phone in the desktop window to revoke its credential. No code entry or account is required.
 
 ## 🛠️ Development
 

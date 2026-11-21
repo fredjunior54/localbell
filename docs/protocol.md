@@ -2,22 +2,24 @@
 
 The receiver listens on private IPv4, port 19420 by default. The explicit `--listen=IP` override binds only a locally assigned address in `100.64.0.0/10` for overlays such as Tailscale. There is no HTTP fallback, browser setup, redirect, or public discovery service.
 
-## Pairing v2
+## Pairing v3
 
 Start with a credential-free TLS probe. Android reads the actual leaf certificate from that connection and pins it on separate HTTPS requests to the same endpoint. The probe deliberately aborts the TLS handshake after observing the leaf; it sends no HTTP data. The phone generates an independent random 32-byte request secret and, after approval, a random 32-byte bearer token. All credential and nonce values use 64 lowercase hex characters.
 
-| Request to `/v2/pair` | JSON body | Success response |
+| Request to `/v3/pair` | JSON body | Success response |
 |---|---|---|
-| `POST` | `code`, `name` | `200`, receiver-generated `nonce` |
-| `PATCH` | `code` | `200`, boolean `approved` |
+| `POST` | `code`, `name`, `commitment` | `200`, receiver-generated `nonce` |
+| `PATCH` | `code`, `challenge` | `200`, boolean `approved` |
 | `PUT` | `code`, `token` | `200`, `status: paired` |
 | `DELETE` | `code` | `200`, `status: cancelled` |
 
-On both devices, calculate SHA-256 over the ASCII string `localbell-pair-v2:<leaf SHA-256 hex>:<code>:<nonce>`. Map the low six bits of each of the first ten digest bytes to the corresponding index of the fixed 64-word list in the Rust and Kotlin implementations. Join those ten words with spaces. The phrase is never returned by the API. Accept on Linux only if all ten words are identical and in the same order on Android. The request name is an unverified label. Do not approve unexpected requests.
+The phone samples a random 32-byte challenge and commits to it with SHA-256 over ASCII `localbell-commit-v3:<leaf SHA-256 hex>:<code>:<challenge>`. It sends the commitment before receiving the receiver's random 32-byte nonce. It reveals the challenge on PATCH; the receiver checks the commitment against its own leaf fingerprint before enabling desktop approval. Reject invalid reveals with `403`.
 
-Test vector: a leaf fingerprint of 64 `0` characters, a code of 64 `1` characters, and a nonce of 64 `2` characters produce `eagle creek iris rose pine moon reed mint grove basil`.
+Both sides hash ASCII `localbell-compare-v3:<leaf SHA-256 hex>:<code>:<nonce>:<challenge>`, read the first four digest bytes as an unsigned big-endian integer, and reduce modulo 1,000,000. Display six decimal digits with leading zeros. The number is never returned by the API. Confirm it on Android and approve on Linux only if both displays match. Android requires local confirmation as well as remote approval before registering a token; an unverified peer claiming approval cannot trigger automatic trust. Do not approve unexpected requests.
 
-One request can be active for at most two minutes. Cancel, reject, expiry, or quitting the receiver invalidates an incomplete request. `409` means occupied or already paired; `410` means the request is no longer active; unapproved completion returns `403`. Approval does not activate a token until the receiver atomically records its digest. Repeating completion with that same already-persisted token is safe, even after restart. Android retains an encrypted pending completion record so reconnecting at the same address can recover from a lost final response, then replaces that record with a saved pairing only after confirmation. Remove the old phone on Linux before pairing another. New pairings require current clients on both devices; existing saved pairs continue to use delivery v1.
+Test vector: leaf fingerprint = 64 `0` characters, code = 64 `1` characters, nonce = 64 `2` characters, challenge = `0000000000000000000000000000000000000000000000000000000000000000`. Commitment = `e4a52592cf444899d4d5a8dd5b0fa2964e6908a323b8b43720ffb2dcffdce2d0`; comparison number = `011659`.
+
+One request can be active for at most two minutes. The receiver allows five new requests per rolling two-minute window; `429` means wait and retry. Cancel, reject, expiry, or quitting the receiver invalidates an incomplete request. `409` means occupied or already paired; `410` means the request is no longer active; unapproved completion returns `403`. Approval does not activate a token until the receiver atomically records its digest. Repeating completion with that same already-persisted token is safe, even after restart. Android retains an encrypted pending completion record so reconnecting at the same address can recover from a lost final response, then replaces that record with a saved pairing only after confirmation. Remove the old phone on Linux before pairing another. New pairings require current clients on both devices; existing saved pairs continue to use delivery v1.
 
 ## Delivery v1
 

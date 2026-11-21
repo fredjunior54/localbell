@@ -101,14 +101,13 @@ impl eframe::App for App {
         ui.label(&status.message);
         ui.separator();
         state.expire();
-        if let Some(pair) = state.pairing.as_mut() {
+        if let Some(pair) = state.pairing.as_mut().filter(|p| p.comparison.is_some()) {
             pair.shown = true;
             ui.heading("Pairing request");
             ui.label(&pair.name);
-            ui.label("Accept only if all ten words match the phone, in order.");
+            ui.label("Accept only if the six-digit number matches the phone.");
             ui.label(
-                egui::RichText::new(phrase(&status.fingerprint, &pair.code, &pair.nonce))
-                    .monospace(),
+                egui::RichText::new(pair.comparison.as_deref().unwrap_or_default()).monospace(),
             );
             ui.label(format!(
                 "{}s remaining",
@@ -197,7 +196,11 @@ pub fn run(state: Shared, status: Arc<Mutex<Network>>) -> Result<()> {
         while !window.visible.load(Ordering::Relaxed) && !window.quit.load(Ordering::Relaxed) {
             if let Ok(mut state) = state.lock() {
                 state.expire();
-                if state.pairing.as_ref().is_some_and(|p| !p.shown) {
+                if state
+                    .pairing
+                    .as_ref()
+                    .is_some_and(|p| !p.shown && p.comparison.is_some())
+                {
                     window.visible.store(true, Ordering::Relaxed);
                 }
             }
@@ -264,30 +267,24 @@ fn open_window(
     .map_err(|e| anyhow::anyhow!("Open desktop window: {e}"))
 }
 
-fn phrase(fingerprint: &str, secret: &str, nonce: &str) -> String {
-    const WORDS: [&str; 64] = [
-        "acorn", "amber", "apple", "arrow", "atlas", "basil", "beach", "birch", "bloom", "blue",
-        "brick", "brook", "cedar", "chalk", "charm", "cherry", "cloud", "coast", "comet", "coral",
-        "crane", "creek", "crown", "daisy", "dawn", "dove", "drift", "dune", "eagle", "earth",
-        "fern", "field", "flame", "flute", "frost", "grape", "green", "grove", "harbor", "hazel",
-        "honey", "iris", "ivy", "jade", "lake", "leaf", "lemon", "lily", "maple", "mint", "moon",
-        "moss", "north", "oak", "ocean", "olive", "pearl", "pine", "plum", "rain", "reed", "river",
-        "rose", "sage",
-    ];
-    use sha2::{Digest, Sha256};
-    Sha256::digest(format!("localbell-pair-v2:{fingerprint}:{secret}:{nonce}").as_bytes())[..10]
-        .iter()
-        .map(|byte| WORDS[usize::from(byte & 63)])
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 #[cfg(test)]
 #[test]
-fn comparison_vector_binds_leaf() {
-    let code = "1".repeat(64);
-    let nonce = "2".repeat(64);
-    let expected = "eagle creek iris rose pine moon reed mint grove basil";
-    assert_eq!(phrase(&"0".repeat(64), &code, &nonce), expected);
-    assert_ne!(phrase(&"3".repeat(64), &code, &nonce), expected);
+fn comparison_vector_preserves_leading_zero_and_binds_leaf() {
+    let (code, nonce, challenge) = (
+        "1".repeat(64),
+        "2".repeat(64),
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    assert_eq!(
+        crate::state::commitment(&"0".repeat(64), &code, challenge),
+        "e4a52592cf444899d4d5a8dd5b0fa2964e6908a323b8b43720ffb2dcffdce2d0"
+    );
+    assert_eq!(
+        crate::state::comparison(&"0".repeat(64), &code, &nonce, challenge),
+        "011659"
+    );
+    assert_ne!(
+        crate::state::comparison(&"3".repeat(64), &code, &nonce, challenge),
+        "011659"
+    );
 }

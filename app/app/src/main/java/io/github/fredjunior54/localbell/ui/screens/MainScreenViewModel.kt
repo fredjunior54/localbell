@@ -88,13 +88,23 @@ class MainScreenViewModel(
 
     internal data class PairingUi(
         val busy: Boolean = false,
-        val phrase: String? = null,
+        val comparison: String? = null,
         val message: Int? = null,
+        val confirmed: Boolean = false,
     )
 
     private val _pairingUi = MutableStateFlow(PairingUi())
     internal val pairingUi = _pairingUi.asStateFlow()
     private var pairingJob: kotlinx.coroutines.Job? = null
+
+    private var comparisonConfirmation: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    fun confirmComparison() {
+        val state = _pairingUi.value
+        if (state.comparison != null && comparisonConfirmation?.complete(Unit) == true) {
+            _pairingUi.value = state.copy(confirmed = true)
+        }
+    }
 
     fun cancelPairing() {
         pairingJob?.cancel()
@@ -112,7 +122,14 @@ class MainScreenViewModel(
         pairingJob = viewModelScope.launch {
             try {
                 PairingClient.connect(endpoint, settingsRepository) {
-                    _pairingUi.value = PairingUi(busy = true, phrase = it)
+                    val confirmation = kotlinx.coroutines.CompletableDeferred<Unit>()
+                    comparisonConfirmation = confirmation
+                    _pairingUi.value = PairingUi(busy = true, comparison = it)
+                    try {
+                        confirmation.await()
+                    } finally {
+                        comparisonConfirmation = null
+                    }
                 }
                 _pairingUi.value = PairingUi(message = R.string.pairing_success)
                 healthMonitor.forceCheck()
@@ -125,6 +142,7 @@ class MainScreenViewModel(
                         PairingClient.Failure.REJECTED -> R.string.pairing_rejected
                         PairingClient.Failure.TIMEOUT -> R.string.pairing_timeout
                         PairingClient.Failure.PENDING -> R.string.pairing_pending
+                        PairingClient.Failure.RATE_LIMITED -> R.string.pairing_rate_limited
                     }
                 _pairingUi.value = PairingUi(message = message)
             } catch (_: java.io.IOException) {

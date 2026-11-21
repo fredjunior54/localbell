@@ -20,6 +20,8 @@ pub struct Pairing {
     pub code: String,
     pub name: String,
     pub nonce: String,
+    pub commitment: String,
+    pub comparison: Option<String>,
     pub approved: bool,
     pub shown: bool,
     pub until: Instant,
@@ -29,6 +31,7 @@ pub struct State {
     path: PathBuf,
     pub devices: Vec<Device>,
     pub pairing: Option<Pairing>,
+    pub attempts: std::collections::VecDeque<Instant>,
 }
 
 pub fn random() -> Result<String> {
@@ -71,6 +74,7 @@ impl State {
             path,
             devices,
             pairing: None,
+            attempts: Default::default(),
         })
     }
 
@@ -80,6 +84,8 @@ impl State {
             code: random()?,
             name: "Phone".into(),
             nonce: random()?,
+            commitment: String::new(),
+            comparison: None,
             approved: true,
             shown: false,
             until: Instant::now() + std::time::Duration::from_secs(120),
@@ -139,6 +145,18 @@ impl State {
         self.devices = devices;
         Ok(())
     }
+}
+
+pub fn commitment(fp: &str, code: &str, challenge: &str) -> String {
+    digest(format!("localbell-commit-v3:{fp}:{code}:{challenge}").as_bytes())
+}
+
+pub fn comparison(fp: &str, code: &str, nonce: &str, challenge: &str) -> String {
+    let hash = Sha256::digest(format!(
+        "localbell-compare-v3:{fp}:{code}:{nonce}:{challenge}"
+    ));
+    let value = u32::from_be_bytes(hash[..4].try_into().expect("four digest bytes"));
+    format!("{:06}", value % 1_000_000)
 }
 
 #[cfg(test)]

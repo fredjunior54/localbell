@@ -147,7 +147,7 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
 
     if (showPairing) {
         val pairing by viewModel.pairingUi.collectAsStateWithLifecycle()
-        PairingDialog(pairing, viewModel::pair) {
+        PairingDialog(pairing, viewModel::pair, viewModel::confirmComparison) {
             viewModel.cancelPairing()
             showPairing = false
         }

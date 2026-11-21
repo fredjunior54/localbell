@@ -17,8 +17,8 @@ LocalBell consists of two components:
 
 1. The receiver starts with its persistent TLS identity
 2. Server advertises itself on the local network using mDNS
-3. The user enters the receiver address; both devices display a phrase derived from the TLS certificate and fresh request values
-4. The user approves the matching phrase on Linux; Android registers a per-device token over pinned HTTPS and stores the configuration securely
+3. The user enters the receiver address; both devices display a six-digit number derived from the TLS certificate and fresh request values
+4. The user confirms the matching number on Android and approves on Linux; Android registers a per-device token over pinned HTTPS and stores the configuration securely
 5. App discovers the server via mDNS
 6. When a notification arrives on the phone, the app sends it to the server over HTTPS
 7. Server displays the notification on the desktop

@@ -32,6 +32,7 @@ internal object PairingClient {
         REJECTED,
         TIMEOUT,
         PENDING,
+        RATE_LIMITED,
     }
 
     class PairingFailure(val reason: Failure) : IOException()
@@ -89,10 +90,10 @@ internal object PairingClient {
     suspend fun connect(
         endpoint: HttpUrl,
         settings: SettingsRepository,
-        onPhrase: (String) -> Unit,
+        onComparison: suspend (String) -> Unit,
     ) =
         withContext(Dispatchers.IO) {
-            val url = endpoint.newBuilder().addPathSegments("v2/pair").build()
+            val url = endpoint.newBuilder().addPathSegments("v3/pair").build()
             val pending = settings.pendingPair()
             if (pending != null) {
                 if (pending.url != endpoint.toString()) throw PairingFailure(Failure.PENDING)
@@ -107,6 +108,7 @@ internal object PairingClient {
             val fingerprint = probe(url)
             val client = pinned(fingerprint)
             val code = secret()
+            val challenge = secret()
             val payload = JSONObject().put("code", code)
             var completing = false
             try {
@@ -115,13 +117,18 @@ internal object PairingClient {
                             client,
                             url,
                             "POST",
-                            JSONObject().put("code", code).put("name", "Android phone"),
+                            JSONObject()
+                                .put("code", code)
+                                .put("name", "Android phone")
+                                .put("commitment", commitment(fingerprint, code, challenge)),
                         )
                         .getString("nonce")
                 if (!hex.matches(nonce)) throw IOException("Invalid pairing nonce")
-                onPhrase(phrase(fingerprint, code, nonce))
-                withTimeoutOrNull(120_000) {
-                    while (!request(client, url, "PATCH", payload).getBoolean("approved")) delay(
+                val reveal = JSONObject().put("code", code).put("challenge", challenge)
+                request(client, url, "PATCH", reveal)
+                withTimeoutOrNull(115_000) {
+                    onComparison(comparison(fingerprint, code, nonce, challenge))
+                    while (!request(client, url, "PATCH", reveal).getBoolean("approved")) delay(
                         1000,
                     )
                 } ?: throw PairingFailure(Failure.TIMEOUT)
@@ -189,6 +196,7 @@ internal object PairingClient {
             .use { response ->
                 when (response.code) {
                     409 -> throw PairingFailure(Failure.BUSY)
+                    429 -> throw PairingFailure(Failure.RATE_LIMITED)
                     403,
                     410 -> throw PairingFailure(Failure.REJECTED)
                 }
@@ -196,20 +204,20 @@ internal object PairingClient {
                 JSONObject(response.peekBody(4096).string())
             }
 
-    internal fun phrase(fingerprint: String, code: String, nonce: String): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest("localbell-pair-v2:$fingerprint:$code:$nonce".toByteArray())
-            .take(10)
-            .joinToString(" ") { words[it.toInt() and 63] }
+    internal fun commitment(fingerprint: String, code: String, challenge: String): String =
+        hash("localbell-commit-v3:$fingerprint:$code:$challenge").hex()
 
-    private val words =
-        ("acorn amber apple arrow atlas basil beach birch " +
-                "bloom blue brick brook cedar chalk charm cherry " +
-                "cloud coast comet coral crane creek crown daisy " +
-                "dawn dove drift dune eagle earth fern field " +
-                "flame flute frost grape green grove harbor hazel " +
-                "honey iris ivy jade lake leaf lemon lily " +
-                "maple mint moon moss north oak ocean olive " +
-                "pearl pine plum rain reed river rose sage")
-            .split(' ')
+    internal fun comparison(
+        fingerprint: String,
+        code: String,
+        nonce: String,
+        challenge: String,
+    ): String {
+        val digest = hash("localbell-compare-v3:$fingerprint:$code:$nonce:$challenge")
+        val value = java.nio.ByteBuffer.wrap(digest).int.toUInt()
+        return (value % 1_000_000u).toString().padStart(6, '0')
+    }
+
+    private fun hash(message: String) =
+        MessageDigest.getInstance("SHA-256").digest(message.toByteArray(Charsets.US_ASCII))
 }

@@ -62,6 +62,8 @@ struct Pair {
     code: String,
     name: Option<String>,
     token: Option<String>,
+    commitment: Option<String>,
+    challenge: Option<String>,
 }
 #[derive(Deserialize)]
 pub struct Notification {
@@ -82,14 +84,15 @@ struct Delivery {
 }
 #[derive(Clone)]
 struct Context {
+    fingerprint: String,
     state: Arc<Mutex<State>>,
     delivery: Arc<Mutex<Delivery>>,
 }
 
-pub fn router(state: Arc<Mutex<State>>, sink: impl Sink + 'static) -> Router {
+pub fn router(state: Arc<Mutex<State>>, sink: impl Sink + 'static, fingerprint: String) -> Router {
     Router::new()
         .route(
-            "/v2/pair",
+            "/v3/pair",
             post(pair)
                 .patch(poll_pair)
                 .put(finish_pair)
@@ -98,6 +101,7 @@ pub fn router(state: Arc<Mutex<State>>, sink: impl Sink + 'static) -> Router {
         .route("/v1/health", get(health))
         .route("/v1/notification", post(send).delete(dismiss))
         .with_state(Context {
+            fingerprint,
             state,
             delivery: Arc::new(Mutex::new(Delivery {
                 active: HashMap::new(),
@@ -123,6 +127,10 @@ fn credential(value: &str) -> bool {
 }
 async fn pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> Response {
     let name = req.name.as_deref().unwrap_or_default().trim();
+    let commitment = req
+        .commitment
+        .filter(|value| credential(value))
+        .ok_or(StatusCode::BAD_REQUEST)?;
     if !credential(&req.code)
         || name.is_empty()
         || name.chars().count() > 64
@@ -136,16 +144,30 @@ async fn pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> Response
         return Err(StatusCode::CONFLICT);
     }
     if let Some(pair) = &state.pairing {
-        if pair.code != req.code {
+        if pair.code != req.code || pair.commitment != commitment {
             return Err(StatusCode::CONFLICT);
         }
         return Ok(Json(json!({"nonce": pair.nonce})));
     }
+    let now = std::time::Instant::now();
+    while state
+        .attempts
+        .front()
+        .is_some_and(|time| now.duration_since(*time) >= Duration::from_secs(120))
+    {
+        state.attempts.pop_front();
+    }
+    if state.attempts.len() >= 5 {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+    state.attempts.push_back(now);
     let nonce = crate::state::random().map_err(error)?;
     state.pairing = Some(crate::state::Pairing {
         code: req.code,
         name: name.into(),
         nonce: nonce.clone(),
+        commitment,
+        comparison: None,
         approved: false,
         shown: false,
         until: std::time::Instant::now() + Duration::from_secs(120),
@@ -157,9 +179,19 @@ async fn poll_pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> Res
     state.expire();
     let pair = state
         .pairing
-        .as_ref()
+        .as_mut()
         .filter(|p| p.code == req.code)
         .ok_or(StatusCode::GONE)?;
+    let challenge = req
+        .challenge
+        .filter(|value| credential(value))
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    if crate::state::commitment(&ctx.fingerprint, &pair.code, &challenge) != pair.commitment {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    pair.comparison.get_or_insert_with(|| {
+        crate::state::comparison(&ctx.fingerprint, &pair.code, &pair.nonce, &challenge)
+    });
     Ok(Json(json!({"approved": pair.approved})))
 }
 async fn finish_pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> Response {
@@ -175,7 +207,7 @@ async fn finish_pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> R
     let pair = state
         .pairing
         .as_ref()
-        .filter(|p| p.code == req.code && p.approved)
+        .filter(|p| p.code == req.code && p.approved && p.comparison.is_some())
         .ok_or(StatusCode::FORBIDDEN)?;
     if !state.devices.is_empty() {
         return Err(StatusCode::CONFLICT);
@@ -302,17 +334,18 @@ mod tests {
         let dir = tempfile::tempdir()?;
         let path = dir.path().join("devices.json");
         let state = Arc::new(Mutex::new(State::load(path.clone())?));
-        let app = router(state.clone(), Fake::default());
+        let app = router(state.clone(), Fake::default(), "0".repeat(64));
         let code = "a".repeat(64);
         let token = "b".repeat(64);
-        let start = json!({"name":"Phone", "code": code}).to_string();
+        let start = json!({"name":"Phone", "code": code, "commitment": crate::state::commitment(&"0".repeat(64), &code, &"2".repeat(64))}).to_string();
         let finish = json!({"code":code, "token":token}).to_string();
-        let pair = "/v2/pair";
+        let pair = "/v3/pair";
         assert_eq!(
             request(&app, "POST", pair, "", start.clone()).await,
             StatusCode::OK
         );
-        let other = json!({"name":"Other", "code": "c".repeat(64)}).to_string();
+        let other = json!({"name":"Other", "code": "c".repeat(64), "commitment": "a".repeat(64)})
+            .to_string();
         assert_eq!(
             request(&app, "POST", pair, "", other.clone()).await,
             StatusCode::CONFLICT
@@ -326,13 +359,31 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
         state.lock().unwrap().pairing.as_mut().unwrap().approved = true;
+        assert_eq!(
+            request(&app, "PUT", pair, "", finish.clone()).await,
+            StatusCode::FORBIDDEN
+        );
+        let bad = json!({"code": code, "challenge": "3".repeat(64)}).to_string();
+        assert_eq!(
+            request(&app, "PATCH", pair, "", bad).await,
+            StatusCode::FORBIDDEN
+        );
+        let reveal = json!({"code": code, "challenge": "2".repeat(64)}).to_string();
+        assert_eq!(
+            request(&app, "PATCH", pair, "", reveal).await,
+            StatusCode::OK
+        );
         let (first, duplicate) = tokio::join!(
             request(&app, "PUT", pair, "", finish.clone()),
             request(&app, "PUT", pair, "", finish.clone()),
         );
         assert_eq!((first, duplicate), (StatusCode::OK, StatusCode::OK));
         assert_eq!(state.lock().unwrap().devices.len(), 1);
-        let restarted = router(Arc::new(Mutex::new(State::load(path)?)), Fake::default());
+        let restarted = router(
+            Arc::new(Mutex::new(State::load(path)?)),
+            Fake::default(),
+            "0".repeat(64),
+        );
         assert_eq!(
             request(&restarted, "PUT", pair, "", finish).await,
             StatusCode::OK
@@ -352,12 +403,12 @@ mod tests {
     async fn cancelled_and_expired_pair_requests_cannot_complete() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
         let state = Arc::new(Mutex::new(State::load(dir.path().join("devices.json"))?));
-        let app = router(state.clone(), Fake::default());
+        let app = router(state.clone(), Fake::default(), "0".repeat(64));
         let code = "a".repeat(64);
-        let start = json!({"code": code, "name": "Phone"}).to_string();
+        let start = json!({"code": code, "name": "Phone", "commitment": crate::state::commitment(&"0".repeat(64), &code, &"2".repeat(64))}).to_string();
         let cancel = json!({"code": code}).to_string();
         let finish = json!({"code": code, "token": "b".repeat(64)}).to_string();
-        let pair = "/v2/pair";
+        let pair = "/v3/pair";
         assert_eq!(
             request(&app, "POST", pair, "", start.clone()).await,
             StatusCode::OK
@@ -385,6 +436,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cancelled_requests_count_toward_retry_limit() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let state = Arc::new(Mutex::new(State::load(dir.path().join("devices.json"))?));
+        let app = router(state, Fake::default(), "0".repeat(64));
+        for attempt in 0..=5 {
+            let code = format!("{attempt:064x}");
+            let start = json!({"name":"Phone", "code":code, "commitment":"a".repeat(64)});
+            let status = request(&app, "POST", "/v3/pair", "", start.to_string()).await;
+            if attempt == 5 {
+                assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+            } else {
+                assert_eq!(status, StatusCode::OK);
+                let cancel = json!({"code":code});
+                assert_eq!(
+                    request(&app, "DELETE", "/v3/pair", "", cancel.to_string()).await,
+                    StatusCode::OK
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn authorization_size_and_device_scoping() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
         let mut state = State::load(dir.path().join("devices.json"))?;
@@ -394,7 +468,7 @@ mod tests {
             let code = state.pairing.as_ref().unwrap().code.clone();
             tokens.push(state.exchange(&code, name)?.unwrap());
         }
-        let app = router(Arc::new(Mutex::new(state)), Fake::default());
+        let app = router(Arc::new(Mutex::new(state)), Fake::default(), "0".repeat(64));
         let body = json!({"key":"same", "app_name":"Test", "title":"Title", "message":"Body", "urgency":1, "timeout_ms":-1}).to_string();
         let path = "/v1/notification";
         assert_eq!(

@@ -12,11 +12,16 @@ import org.junit.Test
 class PairingProtocolTest {
     @Test
     fun comparisonVectorBindsLeaf() {
-        val expected = "eagle creek iris rose pine moon reed mint grove basil"
+        val expected = "011659"
         val code = "1".repeat(64)
         val nonce = "2".repeat(64)
-        assertEquals(expected, PairingClient.phrase("0".repeat(64), code, nonce))
-        assertNotEquals(expected, PairingClient.phrase("3".repeat(64), code, nonce))
+        val challenge = "0000000000000000000000000000000000000000000000000000000000000000"
+        assertEquals(
+            "e4a52592cf444899d4d5a8dd5b0fa2964e6908a323b8b43720ffb2dcffdce2d0",
+            PairingClient.commitment("0".repeat(64), code, challenge),
+        )
+        assertEquals(expected, PairingClient.comparison("0".repeat(64), code, nonce, challenge))
+        assertNotEquals(expected, PairingClient.comparison("3".repeat(64), code, nonce, challenge))
     }
 
     @Test
