@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.7</strong></p>
+<p align="center"><strong>Version 1.4.8</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -54,7 +54,9 @@ tar -xzf localbell-X.Y.Z-linux-amd64.tar.gz
 
 Run `./localbell --help` to list the CLI options or `./localbell --version` to print the installed version. Neither command opens a window.
 
-The app listens on HTTPS port `19420` on a private IPv4 interface. Click the tray icon to show or hide the window. Closing the window keeps forwarding active when a tray host is available; **Quit** stops LocalBell. GNOME may require the AppIndicator and KStatusNotifierItem Support extension.
+On first run, the receiver listens on `0.0.0.0:19420` (all IPv4 interfaces) and accepts only connections from supported private networks. In **Listen settings**, set a specific LAN or Tailscale IPv4 address and port to restrict the listener to that address. Enter a reachable address and the configured port on Android, not `0.0.0.0`. The desktop uses the Catppuccin Mocha palette.
+
+`--listen=IP` and `--port=PORT` override saved settings for one session; **Apply** in the dialog saves both values. If the phone cannot reconnect after an address or port change, remove its saved pairing on Linux and pair again using the new endpoint. Click the tray icon to show or hide the window. Closing the window keeps forwarding active when a tray host is available; **Quit** stops LocalBell. GNOME may require the AppIndicator and KStatusNotifierItem Support extension.
 
 ### 📱 App (Android)
 

@@ -26,6 +26,10 @@ description: Install and configure LocalBell to forward Android notifications to
 
 After upgrading to Android version 1.3.9 from an earlier version, re-enable notification access in Android Settings and pair again.
 
+## Configure the Linux listener
+
+Open **Listen settings** to see or change the listen address and port. The defaults are `0.0.0.0` and `19420`. `0.0.0.0` listens on every IPv4 interface; enter a real reachable address in Android. **Apply** saves the endpoint and switches the receiver to it. If the new endpoint fails, the receiver keeps or retries the previous one. This does not change the TLS identity or paired devices. If Android cannot reconnect after an address or port change, remove its saved pairing on Linux and pair again using the new endpoint.
+
 ## Connect over Tailscale
 
-On Linux, start `./localbell --listen=100.70.80.90`, replacing the example with the receiver's Tailscale IPv4 address. On Android, connect to that address or its MagicDNS name, with port `19420` if required. Both devices must be able to reach each other over the same tailnet. Configure your tailnet policy to allow only intended devices to access this port. Do not use Funnel or forward the port to the Internet. Compare the number even on a tailnet.
+On Linux, enter the receiver’s Tailscale IPv4 address in **Listen settings** for a persistent VPN-only bind, or use `./localbell --listen=100.70.80.90 --port=19420` as a session override (replace the example address). On Android, connect to that address or its MagicDNS name, with port `19420` if required. Both devices must be able to reach each other over the same tailnet. Configure your tailnet policy to allow only intended devices to access this port. Do not use Funnel or forward the port to the Internet. Compare the number even on a tailnet.

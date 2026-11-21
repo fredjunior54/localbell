@@ -1,6 +1,6 @@
 # LocalBell HTTPS Protocol
 
-The receiver listens on private IPv4, port 19420 by default. The explicit `--listen=IP` override binds only a locally assigned address in `100.64.0.0/10` for overlays such as Tailscale. There is no HTTP fallback, browser setup, redirect, or public discovery service.
+The receiver binds `0.0.0.0:19420` by default and rejects TCP peers outside private, link-local, and `100.64.0.0/10` IPv4 ranges before TLS. The desktop can persist a specific bind address and port in `listener.json`. The `--listen=IP` and `--port=PORT` CLI options override saved values for the session. There is no HTTP fallback, browser setup, redirect, or public discovery service.
 
 ## Pairing v3
 

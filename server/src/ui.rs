@@ -1,4 +1,4 @@
-use crate::{Network, Shared};
+use crate::{ListenUpdates, Network, Shared, listener};
 use anyhow::Result;
 use eframe::egui::{self, Color32, FontFamily, Stroke, ViewportCommand};
 use ksni::{MenuItem, blocking::TrayMethods, menu::StandardItem};
@@ -10,10 +10,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-const PANEL: Color32 = Color32::from_rgb(12, 15, 13);
-const BG: Color32 = Color32::from_rgb(7, 9, 8);
-const CARD: Color32 = Color32::from_rgb(18, 22, 19);
-const ACCENT: Color32 = Color32::from_rgb(57, 255, 106);
+// Catppuccin Mocha (https://github.com/catppuccin/catppuccin).
+const BASE: Color32 = Color32::from_rgb(30, 30, 46);
+const MANTLE: Color32 = Color32::from_rgb(24, 24, 37);
+const SURFACE: Color32 = Color32::from_rgb(49, 50, 68);
+const OVERLAY: Color32 = Color32::from_rgb(108, 112, 134);
+const TEXT: Color32 = Color32::from_rgb(205, 214, 244);
+const MAUVE: Color32 = Color32::from_rgb(203, 166, 247);
+const RED: Color32 = Color32::from_rgb(243, 139, 168);
 
 #[derive(Default)]
 struct Window {
@@ -65,11 +69,37 @@ impl ksni::Tray for Tray {
     }
 }
 
+struct ListenForm {
+    address: String,
+    port: String,
+    error: Option<String>,
+}
+
+impl ListenForm {
+    fn validate(&self) -> Result<listener::Settings> {
+        listener::Settings {
+            address: self
+                .address
+                .trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Enter a valid IPv4 address."))?,
+            port: self
+                .port
+                .trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Port must be between 1 and 65535."))?,
+        }
+        .validate()
+    }
+}
+
 struct App {
     state: Shared,
     status: Arc<Mutex<Network>>,
     window: Arc<Window>,
     error: String,
+    configure: ListenUpdates,
+    listen_form: Option<ListenForm>,
 }
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
@@ -85,7 +115,69 @@ impl eframe::App for App {
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
     }
+    fn clear_color(&self, _: &egui::Visuals) -> [f32; 4] {
+        BASE.to_normalized_gamma_f32()
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
+        egui::CentralPanel::no_frame()
+            .frame(
+                egui::Frame::new()
+                    .fill(BASE)
+                    .inner_margin(egui::Margin::same(20)),
+            )
+            .show(ui, |ui| self.content(ui));
+        self.listen_dialog(ui.ctx());
+    }
+}
+
+impl App {
+    fn listen_dialog(&mut self, ctx: &egui::Context) {
+        let Some(mut form) = self.listen_form.take() else {
+            return;
+        };
+        let mut apply = false;
+        let mut cancel = false;
+        let response = egui::Modal::new(egui::Id::new("listen-settings")).show(ctx, |ui| {
+            ui.heading("Listen settings");
+            ui.label("Listen address");
+            ui.text_edit_singleline(&mut form.address);
+            ui.label("Port");
+            ui.text_edit_singleline(&mut form.port);
+            ui.label("Use 0.0.0.0 for all IPv4 interfaces, or enter one LAN or Tailscale address.");
+            if let Some(error) = &form.error {
+                ui.colored_label(RED, error);
+            }
+            ui.horizontal(|ui| {
+                apply = ui.button("Apply").clicked();
+                cancel = ui.button("Cancel").clicked();
+            });
+        });
+        if cancel || response.should_close() {
+            return;
+        }
+        if apply {
+            let result = form.validate().and_then(|settings| {
+                let mut status = self
+                    .status
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Receiver status is unavailable."))?;
+                self.configure.try_send(settings).map_err(|_| {
+                    anyhow::anyhow!("Receiver is unavailable or already applying settings.")
+                })?;
+                status.applying = true;
+                status.error = None;
+                Ok(())
+            });
+            match result {
+                Ok(()) => return,
+                Err(error) => form.error = Some(error.to_string()),
+            }
+        }
+        self.listen_form = Some(form);
+    }
+
+    fn content(&mut self, ui: &mut egui::Ui) {
         let Ok(status) = self.status.lock() else {
             return;
         };
@@ -96,9 +188,25 @@ impl eframe::App for App {
             egui::RichText::new("LocalBell")
                 .family(FontFamily::Name("display".into()))
                 .size(36.0)
-                .color(ACCENT),
+                .color(MAUVE),
         );
         ui.label(&status.message);
+        if status.applying {
+            ui.label("Applying listen settings…");
+        }
+        if let Some(error) = &status.error {
+            ui.colored_label(RED, error);
+        }
+        if ui
+            .add_enabled(!status.applying, egui::Button::new("Listen settings"))
+            .clicked()
+        {
+            self.listen_form = Some(ListenForm {
+                address: status.settings.address.to_string(),
+                port: status.settings.port.to_string(),
+                error: None,
+            });
+        }
         ui.separator();
         state.expire();
         if let Some(pair) = state.pairing.as_mut().filter(|p| p.comparison.is_some()) {
@@ -155,12 +263,12 @@ impl eframe::App for App {
                 .map_or_else(String::new, |e| e.to_string());
         }
         if !self.error.is_empty() {
-            ui.colored_label(Color32::LIGHT_RED, &self.error);
+            ui.colored_label(RED, &self.error);
         }
     }
 }
 
-pub fn run(state: Shared, status: Arc<Mutex<Network>>) -> Result<()> {
+pub fn run(state: Shared, status: Arc<Mutex<Network>>, configure: ListenUpdates) -> Result<()> {
     let window = Arc::new(Window::default());
     window.visible.store(true, Ordering::Relaxed);
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/localbell-icon.png"))?;
@@ -187,6 +295,7 @@ pub fn run(state: Shared, status: Arc<Mutex<Network>>) -> Result<()> {
             Arc::clone(&status),
             Arc::clone(&window),
             icon.clone(),
+            configure.clone(),
         )?;
         if let Some(tray) = &tray {
             tray.update(|_| ());
@@ -224,10 +333,12 @@ fn open_window(
     status: Arc<Mutex<Network>>,
     window: Arc<Window>,
     icon: egui::IconData,
+    configure: ListenUpdates,
 ) -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_app_id("localbell")
+            .with_transparent(false)
             .with_inner_size([520.0, 620.0])
             .with_icon(icon),
         ..Default::default()
@@ -237,14 +348,21 @@ fn open_window(
         options,
         Box::new(move |cc| {
             let mut visuals = egui::Visuals::dark();
-            visuals.panel_fill = PANEL;
-            visuals.window_fill = PANEL;
-            visuals.extreme_bg_color = BG;
-            visuals.widgets.inactive.bg_fill = CARD;
-            visuals.widgets.inactive.weak_bg_fill = CARD;
-            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, ACCENT.gamma_multiply(0.6));
-            visuals.widgets.active.bg_stroke = Stroke::new(1.0, ACCENT);
-            visuals.selection.bg_fill = ACCENT.gamma_multiply(0.35);
+            visuals.panel_fill = BASE;
+            visuals.window_fill = BASE;
+            visuals.extreme_bg_color = MANTLE;
+            visuals.override_text_color = Some(TEXT);
+            visuals.hyperlink_color = MAUVE;
+            visuals.error_fg_color = RED;
+            visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, OVERLAY);
+            visuals.widgets.inactive.bg_fill = SURFACE;
+            visuals.widgets.inactive.weak_bg_fill = SURFACE;
+            visuals.widgets.hovered.bg_fill = SURFACE;
+            visuals.widgets.hovered.weak_bg_fill = SURFACE;
+            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, MAUVE);
+            visuals.widgets.active.bg_stroke = Stroke::new(1.0, MAUVE);
+            visuals.selection.bg_fill = SURFACE;
+            visuals.selection.stroke = Stroke::new(1.0, MAUVE);
             cc.egui_ctx.set_theme(egui::Theme::Dark);
             cc.egui_ctx.set_visuals_of(egui::Theme::Dark, visuals);
             let mut fonts = egui::FontDefinitions::default();
@@ -261,6 +379,8 @@ fn open_window(
                 status,
                 window,
                 error: String::new(),
+                configure,
+                listen_form: None,
             }))
         }),
     )
