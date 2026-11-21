@@ -1,6 +1,6 @@
 [package]
 name = "localbell"
-version = "1.4.0"
+version = "1.4.1"
 edition = "2024"
 
 [dependencies]
@@ -13,7 +13,6 @@ hex = "0.4"
 ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
 mdns-sd = "0.20"
 notify-rust = "4"
-qrcode = { version = "0.14", default-features = false }
 rcgen = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"] }

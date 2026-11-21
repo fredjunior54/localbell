@@ -3,9 +3,12 @@ package io.github.fredjunior54.localbell.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import io.github.fredjunior54.localbell.R
 import io.github.fredjunior54.localbell.data.SettingsRepository
 import io.github.fredjunior54.localbell.di.AppModule
 import io.github.fredjunior54.localbell.network.HealthMonitor
+import io.github.fredjunior54.localbell.network.PairingClient
+import io.github.fredjunior54.localbell.util.LanEndpoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,9 +52,6 @@ class MainScreenViewModel(
     val isBatteryOptimizationDisabled: StateFlow<Boolean> =
         _isBatteryOptimizationDisabled.asStateFlow()
 
-    private val _hasCameraPermission = MutableStateFlow(false)
-    val hasCameraPermission: StateFlow<Boolean> = _hasCameraPermission.asStateFlow()
-
     private val _hasLocalNetworkPermission = MutableStateFlow(true)
     val hasLocalNetworkPermission: StateFlow<Boolean> = _hasLocalNetworkPermission.asStateFlow()
 
@@ -65,15 +65,9 @@ class MainScreenViewModel(
     fun updatePermissions(
         notificationAccess: Boolean,
         batteryOptDisabled: Boolean,
-        cameraPermission: Boolean = _hasCameraPermission.value,
     ) {
         _hasNotificationAccess.value = notificationAccess
         _isBatteryOptimizationDisabled.value = batteryOptDisabled
-        _hasCameraPermission.value = cameraPermission
-    }
-
-    fun setCameraPermission(granted: Boolean) {
-        _hasCameraPermission.value = granted
     }
 
     fun setLocalNetworkPermission(granted: Boolean) {
@@ -92,33 +86,51 @@ class MainScreenViewModel(
         viewModelScope.launch { settingsRepository.setServiceEnabled(enabled) }
     }
 
-    private val _pairingMessage = MutableStateFlow<String?>(null)
-    val pairingMessage = _pairingMessage.asStateFlow()
+    internal data class PairingUi(
+        val busy: Boolean = false,
+        val phrase: String? = null,
+        val message: Int? = null,
+    )
+
+    private val _pairingUi = MutableStateFlow(PairingUi())
+    internal val pairingUi = _pairingUi.asStateFlow()
     private var pairingJob: kotlinx.coroutines.Job? = null
 
-    fun pair(qrData: String) {
+    fun cancelPairing() {
         pairingJob?.cancel()
-        val pairing = io.github.fredjunior54.localbell.util.QrCodeParser.parse(qrData)
-        if (pairing == null) {
-            _pairingMessage.value = "Invalid LocalBell QR code. Generate a new code on the desktop."
+        _pairingUi.value = PairingUi()
+    }
+
+    fun pair(address: String) {
+        if (pairingJob?.isCompleted == false) return
+        val endpoint = LanEndpoint.parse(address)
+        if (endpoint == null) {
+            _pairingUi.value = PairingUi(message = R.string.pairing_invalid)
             return
         }
+        _pairingUi.value = PairingUi(busy = true)
         pairingJob = viewModelScope.launch {
-            _pairingMessage.value = "Pairing with LocalBell…"
             try {
-                val token =
-                    io.github.fredjunior54.localbell.network.PairingClient.exchange(
-                        pairing,
-                        android.os.Build.MODEL,
-                    )
-                settingsRepository.setServerConfig(token, pairing.fingerprint, pairing.url)
-                _pairingMessage.value = null
+                PairingClient.connect(endpoint, settingsRepository) {
+                    _pairingUi.value = PairingUi(busy = true, phrase = it)
+                }
+                _pairingUi.value = PairingUi(message = R.string.pairing_success)
                 healthMonitor.forceCheck()
             } catch (ex: kotlinx.coroutines.CancellationException) {
                 throw ex
-            } catch (_: Exception) {
-                _pairingMessage.value =
-                    "Could not pair. Check the local network and scan a new code."
+            } catch (ex: PairingClient.PairingFailure) {
+                val message =
+                    when (ex.reason) {
+                        PairingClient.Failure.BUSY -> R.string.pairing_busy
+                        PairingClient.Failure.REJECTED -> R.string.pairing_rejected
+                        PairingClient.Failure.TIMEOUT -> R.string.pairing_timeout
+                        PairingClient.Failure.PENDING -> R.string.pairing_pending
+                    }
+                _pairingUi.value = PairingUi(message = message)
+            } catch (_: java.io.IOException) {
+                _pairingUi.value = PairingUi(message = R.string.pairing_connection_error)
+            } catch (_: org.json.JSONException) {
+                _pairingUi.value = PairingUi(message = R.string.pairing_connection_error)
             }
         }
     }

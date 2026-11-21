@@ -3,6 +3,7 @@ package io.github.fredjunior54.localbell.network
 import android.content.Context
 import android.util.Log
 import io.github.fredjunior54.localbell.util.CryptoUtils
+import io.github.fredjunior54.localbell.util.LanEndpoint
 import io.github.fredjunior54.localbell.util.LocalNetworkPermission
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -141,7 +142,11 @@ class HealthMonitor private constructor(private val context: Context) {
             return
         }
         _connectionState.value = ConnectionState.CONNECTING
-        val url = discoverServer(fingerprint)
+        val host = pairing.url.toHttpUrlOrNull()?.host.orEmpty()
+        val url =
+            if (LanEndpoint.allows(host) && !LanEndpoint.isOverlay(host))
+                discoverServer(fingerprint)
+            else null
 
         if (url != null && performHealthCheck(url, fingerprint, token)) {
             _serverUrl.value = url
@@ -169,11 +174,7 @@ class HealthMonitor private constructor(private val context: Context) {
         token: String,
     ): Boolean {
         val endpoint = url.toHttpUrlOrNull() ?: return false
-        if (
-            !endpoint.isHttps ||
-                !io.github.fredjunior54.localbell.util.QrCodeParser.isPrivateIpv4(endpoint.host)
-        )
-            return false
+        if (!endpoint.isHttps) return false
         return try {
             val client =
                 CryptoUtils.createPinnedOkHttpClient(
@@ -183,7 +184,7 @@ class HealthMonitor private constructor(private val context: Context) {
                 )
             val request =
                 Request.Builder()
-                    .url("$url/v1/health")
+                    .url(endpoint.newBuilder().addPathSegments("v1/health").build())
                     .header("Authorization", "Bearer $token")
                     .get()
                     .build()

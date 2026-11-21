@@ -49,3 +49,15 @@ fn unknown_option_reports_usage_without_opening_a_window() {
             .contains("localbell --help")
     );
 }
+
+#[test]
+fn rejects_wildcard_public_and_adjacent_overlay_addresses() {
+    for address in ["0.0.0.0", "8.8.8.8", "100.63.255.255", "100.128.0.0"] {
+        let result = std::process::Command::new(env!("CARGO_BIN_EXE_localbell"))
+            .arg(format!("--listen={address}"))
+            .output()
+            .unwrap();
+        assert!(!result.status.success(), "accepted {address}");
+        assert!(String::from_utf8_lossy(&result.stderr).contains("100.64.0.0/10"));
+    }
+}

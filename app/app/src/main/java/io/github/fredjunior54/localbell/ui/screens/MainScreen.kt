@@ -10,13 +10,11 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,17 +31,16 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,7 +54,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,7 +76,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.fredjunior54.localbell.R
 import io.github.fredjunior54.localbell.network.HealthMonitor
 import io.github.fredjunior54.localbell.service.NotificationForwarderService
-import io.github.fredjunior54.localbell.ui.components.QrScanner
 import io.github.fredjunior54.localbell.ui.theme.spacing
 import io.github.fredjunior54.localbell.util.LocalNetworkPermission
 
@@ -97,26 +92,16 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
     val hasNotificationAccess by viewModel.hasNotificationAccess.collectAsStateWithLifecycle()
     val isBatteryOptimizationDisabled by
         viewModel.isBatteryOptimizationDisabled.collectAsStateWithLifecycle()
-    val hasCameraPermission by viewModel.hasCameraPermission.collectAsStateWithLifecycle()
     val blacklistedAppsCount by viewModel.blacklistedAppsCount.collectAsStateWithLifecycle()
     val hasLocalNetworkPermission by
         viewModel.hasLocalNetworkPermission.collectAsStateWithLifecycle()
     val localNetworkRequested by viewModel.localNetworkRequested.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
 
-    var showQrScanner by remember { mutableStateOf(false) }
+    var showPairing by remember { mutableStateOf(false) }
     var pairingPermissionRequested by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showBlacklist by remember { mutableStateOf(false) }
-
-    val cameraPermissionLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted
-            ->
-            viewModel.setCameraPermission(isGranted)
-            if (isGranted) {
-                showQrScanner = true
-            }
-        }
 
     // Forwarding works without it, but the foreground service notification stays hidden
     val notificationPermissionLauncher =
@@ -130,8 +115,7 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
             if (isGranted) {
                 cancelLocalNetworkNotification(context)
                 if (pairingPermissionRequested) {
-                    if (hasCameraPermission) showQrScanner = true
-                    else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    showPairing = true
                 }
             }
             pairingPermissionRequested = false
@@ -161,21 +145,11 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
         return
     }
 
-    if (showQrScanner) {
-        QrScannerScreen(
-            onQrCodeScanned = { qrData ->
-                viewModel.pair(qrData)
-                showQrScanner = false
-            },
-            onClose = { showQrScanner = false },
-        )
-        return
-    }
-
-    val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
-    pairingMessage?.let { message ->
-        LaunchedEffect(message) {
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+    if (showPairing) {
+        val pairing by viewModel.pairingUi.collectAsStateWithLifecycle()
+        PairingDialog(pairing, viewModel::pair) {
+            viewModel.cancelPairing()
+            showPairing = false
         }
     }
 
@@ -250,10 +224,8 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
                 pairingPermissionRequested = true
                 viewModel.markLocalNetworkRequested()
                 localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
-            } else if (hasCameraPermission) {
-                showQrScanner = true
             } else {
-                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                showPairing = true
             }
         },
         onServiceEnabledChange = { enabled ->
@@ -368,14 +340,14 @@ fun MainScreenContent(
                 onClick = onBatteryOptimizationClick,
             )
 
-            // QR Configuration
+            // Server configuration
             Card(modifier = Modifier.fillMaxWidth(), onClick = onServerConfigClick) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        imageVector = Icons.Default.QrCodeScanner,
+                        imageVector = Icons.Outlined.Link,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -388,7 +360,8 @@ fun MainScreenContent(
                         )
                         Text(
                             text =
-                                if (isConfigured) "Tap to reconfigure" else "Tap to scan QR code",
+                                if (isConfigured) stringResource(R.string.pairing_configured)
+                                else stringResource(R.string.pairing_enter_address),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -557,36 +530,6 @@ private fun SettingRow(
                     if (isOk) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.error,
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun QrScannerScreen(onQrCodeScanned: (String) -> Unit, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Scan QR Code") },
-                navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            QrScanner(onQrCodeScanned = onQrCodeScanned, modifier = Modifier.fillMaxSize())
-
-            Card(modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)) {
-                Text(
-                    text = "Point camera at server QR code",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
         }
     }
 }

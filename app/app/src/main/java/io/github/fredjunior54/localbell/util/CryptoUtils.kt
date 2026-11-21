@@ -74,6 +74,7 @@ object CryptoUtils {
                 if (!chain.request().url.isHttps) throw java.io.IOException("HTTPS is required")
                 chain.proceed(chain.request())
             }
+            .dns(LanEndpoint.dns)
             .followRedirects(false)
             .followSslRedirects(false)
             .proxy(java.net.Proxy.NO_PROXY)

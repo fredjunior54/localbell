@@ -1,4 +1,4 @@
-use crate::{Network, PORT, Shared};
+use crate::{Network, Shared};
 use anyhow::Result;
 use eframe::egui::{self, Color32, FontFamily, Stroke, ViewportCommand};
 use ksni::{MenuItem, blocking::TrayMethods, menu::StandardItem};
@@ -69,7 +69,6 @@ struct App {
     state: Shared,
     status: Arc<Mutex<Network>>,
     window: Arc<Window>,
-    qr: Option<(String, egui::TextureHandle)>,
     error: String,
 }
 impl eframe::App for App {
@@ -79,17 +78,11 @@ impl eframe::App for App {
         if close {
             self.window.visible.store(false, Ordering::Relaxed);
         }
-        if close
-            || !self.window.visible.load(Ordering::Relaxed)
-            || self.window.quit.load(Ordering::Relaxed)
+        if !close
+            && (!self.window.visible.load(Ordering::Relaxed)
+                || self.window.quit.load(Ordering::Relaxed))
         {
-            if let Ok(mut state) = self.state.lock() {
-                state.pairing = None;
-            }
-            self.qr = None;
-            if !close {
-                ctx.send_viewport_cmd(ViewportCommand::Close);
-            }
+            ctx.send_viewport_cmd(ViewportCommand::Close);
         }
     }
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
@@ -107,62 +100,40 @@ impl eframe::App for App {
         );
         ui.label(&status.message);
         ui.separator();
-        if ui
-            .add_enabled(status.ip.is_some(), egui::Button::new("Pair a device"))
-            .clicked()
-        {
-            self.error = state
-                .begin()
-                .err()
-                .map_or_else(String::new, |e| e.to_string());
-        }
-        if state
-            .pairing
-            .as_ref()
-            .is_some_and(|pair| pair.until <= Instant::now())
-        {
-            state.pairing = None;
-        }
-        if let (Some(ip), Some(pair)) = (status.ip, &state.pairing) {
-            let payload = format!(
-                "localbell:1|{ip}|{PORT}|{}|{}",
-                status.fingerprint, pair.code
+        state.expire();
+        if let Some(pair) = state.pairing.as_mut() {
+            pair.shown = true;
+            ui.heading("Pairing request");
+            ui.label(&pair.name);
+            ui.label("Accept only if all ten words match the phone, in order.");
+            ui.label(
+                egui::RichText::new(phrase(&status.fingerprint, &pair.code, &pair.nonce))
+                    .monospace(),
             );
-            if self.qr.as_ref().is_none_or(|(old, _)| old != &payload)
-                && let Ok(qr) = qrcode::QrCode::new(&payload)
-            {
-                let side = qr.width() + 8;
-                let mut pixels = vec![Color32::WHITE; side * side];
-                for y in 0..qr.width() {
-                    for x in 0..qr.width() {
-                        if qr[(x, y)] == qrcode::Color::Dark {
-                            pixels[(y + 4) * side + x + 4] = Color32::BLACK;
-                        }
-                    }
-                }
-                self.qr = Some((
-                    payload,
-                    ui.ctx().load_texture(
-                        "pairing",
-                        egui::ColorImage::new([side, side], pixels),
-                        egui::TextureOptions::NEAREST,
-                    ),
-                ));
-            }
-            if let Some((_, texture)) = &self.qr {
-                ui.image((texture.id(), egui::vec2(256.0, 256.0)));
-            }
             ui.label(format!(
-                "Scan in LocalBell on Android · {}s remaining",
+                "{}s remaining",
                 pair.until
                     .saturating_duration_since(Instant::now())
                     .as_secs()
             ));
-            if ui.button("Cancel pairing").clicked() {
+            let mut reject = false;
+            ui.horizontal(|ui| {
+                reject = ui.button("Reject").clicked();
+                if ui
+                    .add_enabled(!pair.approved, egui::Button::new("Accept"))
+                    .clicked()
+                {
+                    pair.approved = true;
+                }
+            });
+            if pair.approved {
+                ui.label("Waiting for the phone to finish pairing…");
+            }
+            if reject {
                 state.pairing = None;
             }
-        } else {
-            self.qr = None;
+        } else if state.devices.is_empty() {
+            ui.label("Enter the listening address on your phone to pair.");
         }
         ui.separator();
         ui.heading("Paired devices");
@@ -224,6 +195,12 @@ pub fn run(state: Shared, status: Arc<Mutex<Network>>) -> Result<()> {
             break;
         }
         while !window.visible.load(Ordering::Relaxed) && !window.quit.load(Ordering::Relaxed) {
+            if let Ok(mut state) = state.lock() {
+                state.expire();
+                if state.pairing.as_ref().is_some_and(|p| !p.shown) {
+                    window.visible.store(true, Ordering::Relaxed);
+                }
+            }
             std::thread::sleep(Duration::from_millis(100));
         }
         if window.quit.load(Ordering::Relaxed) {
@@ -280,10 +257,37 @@ fn open_window(
                 state,
                 status,
                 window,
-                qr: None,
                 error: String::new(),
             }))
         }),
     )
     .map_err(|e| anyhow::anyhow!("Open desktop window: {e}"))
+}
+
+fn phrase(fingerprint: &str, secret: &str, nonce: &str) -> String {
+    const WORDS: [&str; 64] = [
+        "acorn", "amber", "apple", "arrow", "atlas", "basil", "beach", "birch", "bloom", "blue",
+        "brick", "brook", "cedar", "chalk", "charm", "cherry", "cloud", "coast", "comet", "coral",
+        "crane", "creek", "crown", "daisy", "dawn", "dove", "drift", "dune", "eagle", "earth",
+        "fern", "field", "flame", "flute", "frost", "grape", "green", "grove", "harbor", "hazel",
+        "honey", "iris", "ivy", "jade", "lake", "leaf", "lemon", "lily", "maple", "mint", "moon",
+        "moss", "north", "oak", "ocean", "olive", "pearl", "pine", "plum", "rain", "reed", "river",
+        "rose", "sage",
+    ];
+    use sha2::{Digest, Sha256};
+    Sha256::digest(format!("localbell-pair-v2:{fingerprint}:{secret}:{nonce}").as_bytes())[..10]
+        .iter()
+        .map(|byte| WORDS[usize::from(byte & 63)])
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(test)]
+#[test]
+fn comparison_vector_binds_leaf() {
+    let code = "1".repeat(64);
+    let nonce = "2".repeat(64);
+    let expected = "eagle creek iris rose pine moon reed mint grove basil";
+    assert_eq!(phrase(&"0".repeat(64), &code, &nonce), expected);
+    assert_ne!(phrase(&"3".repeat(64), &code, &nonce), expected);
 }

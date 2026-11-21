@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -6,7 +6,7 @@ use std::{
     io::Write,
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -18,6 +18,10 @@ pub struct Device {
 
 pub struct Pairing {
     pub code: String,
+    pub name: String,
+    pub nonce: String,
+    pub approved: bool,
+    pub shown: bool,
     pub until: Instant,
 }
 
@@ -70,35 +74,49 @@ impl State {
         })
     }
 
+    #[cfg(test)]
     pub fn begin(&mut self) -> Result<()> {
         self.pairing = Some(Pairing {
             code: random()?,
-            until: Instant::now() + Duration::from_secs(120),
+            name: "Phone".into(),
+            nonce: random()?,
+            approved: true,
+            shown: false,
+            until: Instant::now() + std::time::Duration::from_secs(120),
         });
         Ok(())
     }
 
-    pub fn exchange(&mut self, code: &str, name: &str) -> Result<Option<String>> {
-        let Some(pair) = &self.pairing else {
-            return Ok(None);
-        };
-        if Instant::now() >= pair.until || digest(code.as_bytes()) != digest(pair.code.as_bytes()) {
-            return Ok(None);
+    pub fn expire(&mut self) {
+        if self
+            .pairing
+            .as_ref()
+            .is_some_and(|p| p.until <= Instant::now())
+        {
+            self.pairing = None;
         }
-        let name = name.trim();
-        if name.is_empty() || name.chars().count() > 64 || name.chars().any(char::is_control) {
-            bail!("Invalid device name");
+    }
+
+    #[cfg(test)]
+    pub fn exchange(&mut self, code: &str, name: &str) -> Result<Option<String>> {
+        self.expire();
+        if self.pairing.as_ref().is_none_or(|p| p.code != code) {
+            return Ok(None);
         }
         let token = random()?;
+        self.add_device(name, &token)?;
+        self.pairing = None;
+        Ok(Some(token))
+    }
+
+    pub fn add_device(&mut self, name: &str, token: &str) -> Result<()> {
         let mut devices = self.devices.clone();
         devices.push(Device {
             id: random()?,
             name: name.into(),
             digest: digest(token.as_bytes()),
         });
-        self.persist(devices)?;
-        self.pairing = None;
-        Ok(Some(token))
+        self.persist(devices)
     }
 
     pub fn device(&self, token: &str) -> Option<&Device> {

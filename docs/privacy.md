@@ -43,7 +43,6 @@ All communication occurs exclusively within your local network:
 | Permission | Purpose |
 |------------|---------|
 | Notification Access | Read notifications to forward them to your desktop |
-| Camera | Scan QR code during initial setup |
 | Local Network | Communicate with LocalBell server on your LAN |
 
 ## Open Source

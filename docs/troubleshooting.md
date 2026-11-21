@@ -12,9 +12,9 @@ description: Fix common issues with LocalBell — server not starting, notificat
 - Look at the logs for error messages
 - Make sure port 19420 is not in use by another application
 
-**Pairing QR code does not appear**
+**Pairing request does not appear**
 - Show the receiver window from the tray
-- Select **Pair a device** to generate a new QR code
+- Tap **Connect** after verifying the address and port on the phone
 
 **Notifications don't appear on desktop**
 - Check if your desktop environment supports D-Bus notifications
@@ -22,10 +22,9 @@ description: Fix common issues with LocalBell — server not starting, notificat
 
 ## App Issues
 
-**Can't scan QR code**
-- Make sure camera permission is granted
-- Ensure good lighting and steady hands
-- Clean your camera lens
+**Pairing words do not match**
+- Select **Reject** and verify the receiver address
+- Never approve a request unless all words match in order
 
 **App doesn't connect to server**
 - Verify both devices are on the same network

@@ -109,8 +109,8 @@ class ServiceDiscovery(context: Context) {
                                                 .mapNotNull { it.hostAddress }
                                                 .firstOrNull {
                                                     io.github.fredjunior54.localbell.util
-                                                        .QrCodeParser
-                                                        .isPrivateIpv4(it)
+                                                        .LanEndpoint
+                                                        .allows(it)
                                                 }
                                         if (
                                             serviceInfo.attributes["fp"]?.decodeToString() !=

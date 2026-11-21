@@ -60,7 +60,8 @@ impl Sink for DesktopSink {
 #[derive(Deserialize)]
 struct Pair {
     code: String,
-    name: String,
+    name: Option<String>,
+    token: Option<String>,
 }
 #[derive(Deserialize)]
 pub struct Notification {
@@ -87,7 +88,13 @@ struct Context {
 
 pub fn router(state: Arc<Mutex<State>>, sink: impl Sink + 'static) -> Router {
     Router::new()
-        .route("/v1/pair", post(pair))
+        .route(
+            "/v2/pair",
+            post(pair)
+                .patch(poll_pair)
+                .put(finish_pair)
+                .delete(cancel_pair),
+        )
         .route("/v1/health", get(health))
         .route("/v1/notification", post(send).delete(dismiss))
         .with_state(Context {
@@ -108,24 +115,83 @@ fn error<T>(_: T) -> StatusCode {
     StatusCode::INTERNAL_SERVER_ERROR
 }
 
+fn credential(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
 async fn pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> Response {
-    if req.code.len() != 64
-        || req.name.trim().is_empty()
-        || req.name.trim().chars().count() > 64
-        || req.name.trim().chars().any(char::is_control)
+    let name = req.name.as_deref().unwrap_or_default().trim();
+    if !credential(&req.code)
+        || name.is_empty()
+        || name.chars().count() > 64
+        || name.chars().any(char::is_control)
     {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let token = ctx
-        .state
-        .lock()
-        .map_err(error)?
-        .exchange(&req.code, &req.name)
-        .map_err(error)?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    Ok(Json(json!({"token": token})))
+    let mut state = ctx.state.lock().map_err(error)?;
+    state.expire();
+    if !state.devices.is_empty() {
+        return Err(StatusCode::CONFLICT);
+    }
+    if let Some(pair) = &state.pairing {
+        if pair.code != req.code {
+            return Err(StatusCode::CONFLICT);
+        }
+        return Ok(Json(json!({"nonce": pair.nonce})));
+    }
+    let nonce = crate::state::random().map_err(error)?;
+    state.pairing = Some(crate::state::Pairing {
+        code: req.code,
+        name: name.into(),
+        nonce: nonce.clone(),
+        approved: false,
+        shown: false,
+        until: std::time::Instant::now() + Duration::from_secs(120),
+    });
+    Ok(Json(json!({"nonce": nonce})))
 }
-
+async fn poll_pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> Response {
+    let mut state = ctx.state.lock().map_err(error)?;
+    state.expire();
+    let pair = state
+        .pairing
+        .as_ref()
+        .filter(|p| p.code == req.code)
+        .ok_or(StatusCode::GONE)?;
+    Ok(Json(json!({"approved": pair.approved})))
+}
+async fn finish_pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> Response {
+    let token = req
+        .token
+        .filter(|t| credential(t))
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let mut state = ctx.state.lock().map_err(error)?;
+    if state.device(&token).is_some() {
+        return Ok(Json(json!({"status": "paired"})));
+    }
+    state.expire();
+    let pair = state
+        .pairing
+        .as_ref()
+        .filter(|p| p.code == req.code && p.approved)
+        .ok_or(StatusCode::FORBIDDEN)?;
+    if !state.devices.is_empty() {
+        return Err(StatusCode::CONFLICT);
+    }
+    let name = pair.name.clone();
+    state.add_device(&name, &token).map_err(error)?;
+    state.pairing = None;
+    Ok(Json(json!({"status": "paired"})))
+}
+async fn cancel_pair(Extract(ctx): Extract<Context>, Json(req): Json<Pair>) -> Response {
+    let mut state = ctx.state.lock().map_err(error)?;
+    if state.pairing.as_ref().is_some_and(|p| p.code == req.code) {
+        state.pairing = None;
+    }
+    Ok(Json(json!({"status": "cancelled"})))
+}
 fn device(ctx: &Context, headers: &HeaderMap) -> Result<String, StatusCode> {
     let token = headers
         .get("authorization")
@@ -229,6 +295,93 @@ mod tests {
             .await
             .unwrap()
             .status()
+    }
+
+    #[tokio::test]
+    async fn pairing_needs_approval_and_completion_is_idempotent() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("devices.json");
+        let state = Arc::new(Mutex::new(State::load(path.clone())?));
+        let app = router(state.clone(), Fake::default());
+        let code = "a".repeat(64);
+        let token = "b".repeat(64);
+        let start = json!({"name":"Phone", "code": code}).to_string();
+        let finish = json!({"code":code, "token":token}).to_string();
+        let pair = "/v2/pair";
+        assert_eq!(
+            request(&app, "POST", pair, "", start.clone()).await,
+            StatusCode::OK
+        );
+        let other = json!({"name":"Other", "code": "c".repeat(64)}).to_string();
+        assert_eq!(
+            request(&app, "POST", pair, "", other.clone()).await,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            request(&app, "PUT", pair, "", finish.clone()).await,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            request(&app, "GET", "/v1/health", &token, String::new()).await,
+            StatusCode::UNAUTHORIZED
+        );
+        state.lock().unwrap().pairing.as_mut().unwrap().approved = true;
+        let (first, duplicate) = tokio::join!(
+            request(&app, "PUT", pair, "", finish.clone()),
+            request(&app, "PUT", pair, "", finish.clone()),
+        );
+        assert_eq!((first, duplicate), (StatusCode::OK, StatusCode::OK));
+        assert_eq!(state.lock().unwrap().devices.len(), 1);
+        let restarted = router(Arc::new(Mutex::new(State::load(path)?)), Fake::default());
+        assert_eq!(
+            request(&restarted, "PUT", pair, "", finish).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            request(&restarted, "POST", pair, "", other).await,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            request(&restarted, "GET", "/v1/health", &token, String::new()).await,
+            StatusCode::OK
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancelled_and_expired_pair_requests_cannot_complete() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let state = Arc::new(Mutex::new(State::load(dir.path().join("devices.json"))?));
+        let app = router(state.clone(), Fake::default());
+        let code = "a".repeat(64);
+        let start = json!({"code": code, "name": "Phone"}).to_string();
+        let cancel = json!({"code": code}).to_string();
+        let finish = json!({"code": code, "token": "b".repeat(64)}).to_string();
+        let pair = "/v2/pair";
+        assert_eq!(
+            request(&app, "POST", pair, "", start.clone()).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            request(&app, "DELETE", pair, "", cancel).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            request(&app, "PUT", pair, "", finish.clone()).await,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(request(&app, "POST", pair, "", start).await, StatusCode::OK);
+        {
+            let mut guard = state.lock().unwrap();
+            let pending = guard.pairing.as_mut().unwrap();
+            pending.approved = true;
+            pending.until = std::time::Instant::now();
+        }
+        assert_eq!(
+            request(&app, "PUT", pair, "", finish).await,
+            StatusCode::FORBIDDEN
+        );
+        Ok(())
     }
 
     #[tokio::test]

@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.0</strong></p>
+<p align="center"><strong>Version 1.4.1</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -27,8 +27,10 @@ Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a
 ## 🔔 How it works
 
 1. Open LocalBell on your Linux desktop.
-2. Select **Pair a device** and scan the temporary QR code with LocalBell on Android.
+2. Enter the receiver address in LocalBell on Android and tap **Connect**. Compare all ten words on both screens, then select **Accept** on Linux only if they match.
 3. Grant notification access on Android and enable forwarding. LocalBell delivers notifications to your desktop over the local network.
+
+For an optional Tailscale connection, see the [setup guide](docs/getting-started.md#connect-over-tailscale). The same phrase check applies. The receiver stores its identity and paired-device credentials under `~/.config/localbell/` by default.
 
 ## ✨ Features
 
@@ -65,8 +67,8 @@ Download and install `localbell-X.Y.Z.apk` from the same release. Android may as
 
 ## 🔒 Security
 
-- **TLS** encrypts notifications in transit. The Android app pins the certificate fingerprint from the pairing QR code.
-- Each phone gets its own credential from a **one-time QR code** that expires after two minutes. Remove a phone in the desktop window to revoke its credential. No PIN or account is required.
+- **TLS** encrypts notifications in transit. The Android app pins the certificate verified by the pairing phrase.
+- A pairing request expires after two minutes. Only one new phone can be paired at a time. Remove a phone in the desktop window to revoke its credential. No PIN or account is required.
 
 ## 🛠️ Development
 

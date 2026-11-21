@@ -132,12 +132,36 @@ class SettingsRepository(private val context: Context) {
 
     val isConfigured: Flow<Boolean> = pairing.map { it != null }
 
+    class PendingPair(val url: String, val fingerprint: String, val code: String, val token: String)
+
+    private val pendingPairKey = stringPreferencesKey("pending_pair_completion")
+
+    suspend fun pendingPair(): PendingPair? {
+        val value =
+            context.dataStore.data.first()[pendingPairKey]?.let { decrypt(it) } ?: return null
+        val parts = value.split(' ')
+        if (parts.size != 4) return null
+        return PendingPair(parts[0], parts[1], parts[2], parts[3])
+    }
+
+    suspend fun savePendingPair(pair: PendingPair?) {
+        context.dataStore.edit { prefs ->
+            if (pair == null) prefs.remove(pendingPairKey)
+            else
+                prefs[pendingPairKey] =
+                    encrypt(
+                        listOf(pair.url, pair.fingerprint, pair.code, pair.token).joinToString(" "),
+                    )
+        }
+    }
+
     suspend fun setServerConfig(token: String, fingerprint: String, url: String) {
         context.dataStore.edit { prefs ->
             prefs[AUTH_TOKEN] = encrypt(token)
             prefs[CERT_FINGERPRINT] = encrypt(fingerprint)
             prefs[CACHED_SERVER_URL] = url
             prefs[protocol] = 1
+            prefs.remove(pendingPairKey)
         }
     }
 

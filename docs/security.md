@@ -16,7 +16,7 @@ LocalBell is designed with privacy and security as core principles:
 
 ## Authentication
 
-The QR code contains a short-lived, single-use pairing code. The app exchanges it over pinned HTTPS for a per-device bearer token. The receiver can revoke that token without affecting other devices.
+The phone and receiver display the same certificate-bound phrase. After the user compares it and approves on Linux, Android registers a per-device bearer token over pinned HTTPS. The receiver can revoke that token without affecting other devices.
 
 The token is stored securely on both the server and the app.
 
@@ -24,7 +24,7 @@ The token is stored securely on both the server and the app.
 
 All communication between the app and server uses HTTPS with TLS 1.3.
 
-The server generates a self-signed certificate on first startup. The certificate fingerprint is included in the QR code, allowing the app to verify it's talking to the correct server (certificate pinning).
+The server generates a self-signed certificate on first startup. The phone pins the certificate authenticated by comparing the words on both devices.
 
 ## Certificate Pinning
 
@@ -35,7 +35,6 @@ The app stores the server's certificate fingerprint and verifies it on every con
 The Android app requires:
 
 - **Notification access** - To read and forward notifications
-- **Camera** - To scan the QR code during setup
 - **Local network** - To communicate with the server
 
 No internet permission is required after the initial app download.

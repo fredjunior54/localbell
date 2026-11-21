@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.fredjunior54.localbell"
         minSdk = 34
         targetSdk = 37
-        versionCode = 30
-        versionName = "1.4.0"
+        versionCode = 31
+        versionName = "1.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -104,12 +104,6 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.tink.android)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-
-    implementation(libs.camera.core)
-    implementation(libs.camera.camera2)
-    implementation(libs.camera.lifecycle)
-    implementation(libs.camera.view)
-    implementation(libs.mlkit.barcode)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

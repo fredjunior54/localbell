@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pairing_title">Connect to LocalBell</string>
+    <string name="pairing_address">IP address or hostname</string>
+    <string name="pairing_example" translatable="false">192.168.1.10:19420</string>
+    <string name="pairing_connect">Connect</string>
+    <string name="pairing_cancel">Cancel</string>
+    <string name="pairing_connecting">Contacting the receiver…</string>
+    <string name="pairing_compare">On Linux, select Accept only if all ten words match in this order.</string>
+    <string name="pairing_invalid">Enter a valid address and optional port.</string>
+    <string name="pairing_timeout">The request expired. Connect again to retry.</string>
+    <string name="pairing_rejected">The request was rejected or is no longer active.</string>
+    <string name="pairing_busy">The receiver is already paired or has another pending request.</string>
+    <string name="pairing_connection_error">Could not connect. Check the address and make sure the receiver is running.</string>
+    <string name="pairing_pending">Reconnect to the previous address to finish its pairing first.</string>
+    <string name="pairing_success">The receiver is paired.</string>
+    <string name="pairing_configured">Tap to connect to a different receiver</string>
+    <string name="pairing_enter_address">Tap to enter a server address</string>
+</resources>
