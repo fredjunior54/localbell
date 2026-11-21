@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.3.10</strong></p>
+<p align="center"><strong>Version 1.3.11</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -106,10 +106,10 @@ The default bump is **patch**. Only Fred Junior can authorize `minor` or `major`
 When ready to publish, run this on the build machine with GitHub CLI authenticated and `jq` available:
 
 ```bash
-./scripts/publish-release.sh vX.Y.Z
+./scripts/publish-release.sh
 ```
 
-This tags the prepared commit and publishes its two assets without rebuilding. If the upload is interrupted, rerun the same command. It reuses matching uploaded assets and never replaces a public release or moves a tag. If GitHub reports a mismatched or incomplete asset, review the draft before retrying. GitHub Actions only runs CI.
+The script detects the version from the current commit and confirms the prepared build belongs to it. If that version is already public, it prints the release URL and exits without uploading or installing anything. To publish a different prepared version, pass it explicitly: `./scripts/publish-release.sh vX.Y.Z`. The script tags the prepared commit and publishes its two assets without rebuilding. If the upload is interrupted, rerun the same command. It reuses matching uploaded assets and never replaces a public release or moves a tag. If GitHub reports a mismatched or incomplete asset, review the draft before retrying. GitHub Actions only runs CI.
 
 To automatically update an already-paired phone over Wi-Fi, run `adb devices -l` while the phone is online. Copy its exact serial ending in `._adb-tls-connect._tcp`, then save it once in fish (replace the example serial):
 

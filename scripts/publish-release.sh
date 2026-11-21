@@ -34,32 +34,63 @@ install_wifi_apk() {
     printf 'Wi-Fi APK install skipped: the configured phone is not online and authorized.\n'
 }
 
-[[ $# == 1 && $1 =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || fail 'Usage: scripts/publish-release.sh vX.Y.Z'
-tag=$1
-version=${tag#v}
+[[ $# -le 1 ]] || fail 'Usage: scripts/publish-release.sh [vX.Y.Z]'
 repo=fredjunior54/localbell
 cd "$(git rev-parse --show-toplevel)"
 [[ $(git remote get-url origin) == "git@github.com:$repo.git" && $(git remote get-url --push origin) == "git@github.com:$repo.git" ]] || fail 'Origin must point to LocalBell over SSH.'
+head=$(git rev-parse HEAD)
+android_version() {
+    git show "$1:app/app/build.gradle.kts" | sed -nE 's/^[[:space:]]*versionName = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p'
+}
+if [[ $# == 0 ]]; then
+    tag=v$(android_version "$head")
+else
+    tag=$1
+fi
+[[ $tag =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || fail 'Expected a version in vX.Y.Z format.'
+version=${tag#v}
 release_dir=$(git rev-parse --absolute-git-dir)/localbell-releases
+mkdir -p "$release_dir"
+exec 9>"$release_dir/lock"
+flock -n 9 || fail 'Another LocalBell build or publication is running.'
+
+gh auth status --hostname github.com >/dev/null 2>&1 || fail 'Authenticate GitHub CLI first.'
+find_release() {
+    gh api --hostname github.com --paginate --slurp "repos/$repo/releases?per_page=100" |
+        jq -ce --arg tag "$tag" '
+            if type != "array" or any(.[]; type != "array") then error("Unexpected release list")
+            else [.[][] | select(.tag_name == $tag)] |
+                if length > 1 then error("Multiple releases match the tag") else first // {} end
+            end'
+}
+release=$(find_release) || fail 'Could not check GitHub for the selected release.'
+if jq -e '.draft == false' <<< "$release" >/dev/null; then
+    url=$(jq -er '.html_url' <<< "$release") || fail 'Published release has no URL.'
+    printf '%s is already published: %s\n' "$tag" "$url"
+    exit 0
+fi
+id=$(jq -r '.id // empty' <<< "$release")
+if [[ $release != '{}' ]]; then
+    [[ $id =~ ^[0-9]+$ ]] || fail 'Unexpected release ID.'
+    jq -e '.draft == true' <<< "$release" >/dev/null || fail 'Unexpected release metadata.'
+fi
 assets=$release_dir/$tag
 apk=localbell-$version.apk
 archive=localbell-$version-linux-amd64.tar.gz
 [[ -d $assets ]] || fail "No locally prepared build for $tag."
-exec 9>"$release_dir/lock"
-flock -n 9 || fail 'Another LocalBell build or publication is running.'
 for file in commit SHA256SUMS "$apk" "$archive"; do
     [[ -f $assets/$file && ! -L $assets/$file ]] || fail "Missing or unexpected retained file: $file"
 done
 commit=$(<"$assets/commit")
 [[ $commit =~ ^[0-9a-f]{40}$ && $(git rev-parse --verify "$commit^{commit}") == "$commit" ]] || fail 'Invalid retained commit.'
-git show "$commit:app/app/build.gradle.kts" | grep -Fx "        versionName = \"$version\"" >/dev/null || fail 'Retained commit has the wrong Android version.'
+[[ $# != 0 || $commit == "$head" ]] || fail 'Prepared artifacts do not belong to the current commit.'
+[[ $(android_version "$commit") == "$version" ]] || fail 'Retained commit has the wrong Android version.'
 checksums=$(cd "$assets" && sha256sum -- "$apk" "$archive")
 [[ $checksums == "$(<"$assets/SHA256SUMS")" ]] || fail 'Retained artifacts do not match their checksums.'
 apk_digest=${checksums%% *}
 archive_digest=${checksums##*$'\n'}
 archive_digest=${archive_digest%% *}
 
-gh auth status --hostname github.com >/dev/null 2>&1 || fail 'Authenticate GitHub CLI first.'
 git fetch --no-tags origin refs/heads/main
 git merge-base --is-ancestor "$commit" FETCH_HEAD || fail 'The prepared commit is not on origin/main.'
 ref=refs/tags/$tag
@@ -75,13 +106,13 @@ elif [[ -z $remote ]]; then
 fi
 if [[ -z $remote ]]; then git push origin "$ref:$ref"; fi
 
-release_id() { gh release view "$tag" --repo "$repo" --json databaseId --jq .databaseId; }
-if ! id=$(release_id); then
+if [[ -z $id ]]; then
     gh release create "$tag" --repo "$repo" --verify-tag --generate-notes --draft
-    id=$(release_id)
+    release=$(find_release) || fail 'Could not identify the draft GitHub release.'
+    id=$(jq -er 'select(.draft == true) | .id' <<< "$release") || fail 'Expected a draft GitHub release.'
 fi
 [[ $id =~ ^[0-9]+$ ]] || fail 'Could not identify the GitHub release.'
-release_json() { gh api "repos/$repo/releases/$id"; }
+release_json() { gh api --hostname github.com "repos/$repo/releases/$id"; }
 matching_assets() {
     jq -e --arg tag "$tag" --arg apk "$apk" --arg linux "$archive" \
         --arg apkDigest "sha256:$apk_digest" --arg linuxDigest "sha256:$archive_digest" '
