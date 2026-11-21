@@ -55,6 +55,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,7 +79,6 @@ import com.alessandrolattao.lanotifica.network.HealthMonitor
 import com.alessandrolattao.lanotifica.service.NotificationForwarderService
 import com.alessandrolattao.lanotifica.ui.components.QrScanner
 import com.alessandrolattao.lanotifica.util.LocalNetworkPermission
-import com.alessandrolattao.lanotifica.util.QrCodeParser
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,6 +102,7 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
     val activity = LocalActivity.current
 
     var showQrScanner by remember { mutableStateOf(false) }
+    var pairingPermissionRequested by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showBlacklist by remember { mutableStateOf(false) }
 
@@ -125,7 +126,12 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
             viewModel.setLocalNetworkPermission(isGranted)
             if (isGranted) {
                 cancelLocalNetworkNotification(context)
+                if (pairingPermissionRequested) {
+                    if (hasCameraPermission) showQrScanner = true
+                    else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
             }
+            pairingPermissionRequested = false
         }
 
     // Check permissions when app resumes (lifecycle-aware, no polling!)
@@ -155,15 +161,19 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
     if (showQrScanner) {
         QrScannerScreen(
             onQrCodeScanned = { qrData ->
-                val parsed = QrCodeParser.parse(qrData)
-                if (parsed != null) {
-                    viewModel.setServerConfig(parsed.token, parsed.fingerprint)
-                }
+                viewModel.pair(qrData)
                 showQrScanner = false
             },
             onClose = { showQrScanner = false },
         )
         return
+    }
+
+    val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
+    pairingMessage?.let { message ->
+        LaunchedEffect(message) {
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     if (showAboutDialog) {
@@ -227,7 +237,14 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
         onNotificationAccessClick = { openNotificationListenerSettings(context) },
         onBatteryOptimizationClick = { requestDisableBatteryOptimization(context) },
         onServerConfigClick = {
-            if (hasCameraPermission) {
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN &&
+                    !hasLocalNetworkPermission
+            ) {
+                pairingPermissionRequested = true
+                viewModel.markLocalNetworkRequested()
+                localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+            } else if (hasCameraPermission) {
                 showQrScanner = true
             } else {
                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA)

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 
 /**
@@ -92,23 +93,31 @@ class HealthMonitor private constructor(private val context: Context) {
         }
     }
 
-    /** Returns the current server URL if connected, null otherwise. */
-    fun getServerUrlIfConnected(): String? {
-        return if (_connectionState.value == ConnectionState.CONNECTED) {
-            _serverUrl.value
-        } else {
-            null
+    @Volatile private var connectedToken: String? = null
+
+    fun getServerUrlIfConnected(token: String): String? =
+        _serverUrl.value.takeIf {
+            _connectionState.value == ConnectionState.CONNECTED && connectedToken == token
         }
+
+    private val healthMutex = Mutex()
+
+    private suspend fun checkHealth() = healthMutex.withLock {
+        checkHealthOnce()
     }
 
-    private suspend fun checkHealth() {
-        val fingerprint = settingsRepository.certFingerprint.first()
-        if (fingerprint.isBlank()) {
+    private suspend fun checkHealthOnce() {
+        val pairing = settingsRepository.pairing.first()
+        if (pairing == null) {
             Log.d(TAG, "No fingerprint configured, skipping health check")
+            _serverUrl.value = null
             _connectionState.value = ConnectionState.DISCONNECTED
             return
         }
 
+        val token = pairing.token
+        val fingerprint = pairing.fingerprint
+        if (currentFingerprint != fingerprint || connectedToken != token) _serverUrl.value = null
         currentFingerprint = fingerprint
 
         if (LocalNetworkPermission.isMissing(context)) {
@@ -119,26 +128,25 @@ class HealthMonitor private constructor(private val context: Context) {
         }
 
         // Try cached URL first
-        var url =
-            _serverUrl.value
-                ?: settingsRepository.cachedServerUrl.first().takeIf { it.isNotBlank() }
-
-        if (url != null) {
-            if (performHealthCheck(url, fingerprint)) {
-                _serverUrl.value = url
-                _connectionState.value = ConnectionState.CONNECTED
-                return
-            }
-            Log.d(TAG, "Cached URL failed health check, attempting discovery")
+        val cachedUrl = _serverUrl.value ?: pairing.url
+        if (performHealthCheck(cachedUrl, fingerprint, token)) {
+            _serverUrl.value = cachedUrl
+            connectedToken = token
+            _connectionState.value = ConnectionState.CONNECTED
+            return
         }
-
-        // Discovery
+        if (settingsRepository.pairing.first()?.token != token) {
+            _serverUrl.value = null
+            _connectionState.value = ConnectionState.DISCONNECTED
+            return
+        }
         _connectionState.value = ConnectionState.CONNECTING
-        url = discoverServer()
+        val url = discoverServer(fingerprint)
 
-        if (url != null && performHealthCheck(url, fingerprint)) {
+        if (url != null && performHealthCheck(url, fingerprint, token)) {
             _serverUrl.value = url
-            settingsRepository.setCachedServerUrl(url)
+            settingsRepository.setCachedServerUrl(url, token)
+            connectedToken = token
             _connectionState.value = ConnectionState.CONNECTED
             Log.d(TAG, "Connected to server at $url")
         } else {
@@ -148,14 +156,24 @@ class HealthMonitor private constructor(private val context: Context) {
         }
     }
 
-    private suspend fun discoverServer(): String? {
+    private suspend fun discoverServer(fingerprint: String): String? {
         return discoveryMutex.withLock {
             Log.d(TAG, "Discovering server...")
-            serviceDiscovery.discoverServer()?.url
+            serviceDiscovery.discoverServer(fingerprint)?.url
         }
     }
 
-    private fun performHealthCheck(url: String, fingerprint: String): Boolean {
+    private suspend fun performHealthCheck(
+        url: String,
+        fingerprint: String,
+        token: String,
+    ): Boolean {
+        val endpoint = url.toHttpUrlOrNull() ?: return false
+        if (
+            !endpoint.isHttps ||
+                !com.alessandrolattao.lanotifica.util.QrCodeParser.isPrivateIpv4(endpoint.host)
+        )
+            return false
         return try {
             val client =
                 CryptoUtils.createPinnedOkHttpClient(
@@ -163,11 +181,18 @@ class HealthMonitor private constructor(private val context: Context) {
                     connectTimeoutMs = HEALTH_CHECK_TIMEOUT_MS,
                     readTimeoutMs = HEALTH_CHECK_TIMEOUT_MS,
                 )
-            val request = Request.Builder().url("$url/health").get().build()
+            val request =
+                Request.Builder()
+                    .url("$url/v1/health")
+                    .header("Authorization", "Bearer $token")
+                    .get()
+                    .build()
 
             val response = client.newCall(request).execute()
             val success = response.isSuccessful
+            val revoked = response.code == 401
             response.close()
+            if (revoked) settingsRepository.clearPairingIfCurrent(token)
 
             if (success) {
                 Log.d(TAG, "Health check passed for $url")

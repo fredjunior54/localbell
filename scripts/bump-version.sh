@@ -30,20 +30,25 @@ add_path() {
 }
 for path; do add_path "$path"; done
 export GIT_LITERAL_PATHSPECS=1
-metadata=(app/app/build.gradle.kts packaging/arch/PKGBUILD packaging/arch/.SRCINFO)
+if ! grep -Fxq README.md <<< "$(printf '%s\n' "${paths[@]}")"; then
+    if ! git ls-files --error-unmatch README.md >/dev/null 2>&1 ||
+        ! git diff --quiet HEAD -- README.md || ! git diff --cached --quiet -- README.md; then
+        fail 'README.md has unselected changes; select it explicitly or set those changes aside.'
+    fi
+fi
+metadata=(app/app/build.gradle.kts packaging/arch/PKGBUILD packaging/arch/.SRCINFO server/Cargo.toml server/Cargo.lock README.md)
 for path in "${metadata[@]}"; do add_path "$path"; done
 
-for tool in gh make makepkg go java keytool file tar flock; do
+for tool in gh make makepkg cargo java keytool file tar flock; do
     command -v "$tool" >/dev/null || fail "Missing tool: $tool"
 done
-gopath=$(go env GOPATH)
-export PATH="${gopath%%:*}/bin:$PATH"
 remote_head=$(git ls-remote --exit-code origin refs/heads/main)
 [[ ${remote_head%%$'\t'*} == "$(git rev-parse refs/remotes/origin/main)" ]] || fail 'Fetch and review origin/main before releasing.'
 git merge-base --is-ancestor "${remote_head%%$'\t'*}" "$head" || fail 'Local main is behind origin.'
 gh auth status --hostname github.com >/dev/null 2>&1 || fail 'Authenticate GitHub CLI first.'
 
 read_version() { sed -nE 's/^[[:space:]]*versionName = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p'; }
+read_readme_version() { sed -nE 's@^<p align="center"><strong>Version ([0-9]+\.[0-9]+\.[0-9]+)</strong></p>$@\1@p'; }
 read_code() { sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p'; }
 current=$(git show "HEAD:${metadata[0]}" | read_version)
 code=$(git show "HEAD:${metadata[0]}" | read_code)
@@ -115,7 +120,12 @@ GIT_INDEX_FILE=$index git checkout-index -a --prefix="$work/tree/"
 (
     cd "$work/tree"
     sed -i -E "s/(versionName = )\"[^\"]+\"/\1\"$version\"/; s/(versionCode = )[0-9]+/\1$((code + 1))/" "${metadata[0]}"
+    [[ $(read_readme_version < README.md) == "$current" ]] || fail 'Expected one README version matching the current Android version.'
+    sed -i -E "s#^(<p align=\"center\"><strong>Version )[0-9]+\.[0-9]+\.[0-9]+(</strong></p>)\$#\1${version}\2#" README.md
+    [[ $(read_readme_version < README.md) == "$version" ]] || fail 'Could not synchronize the README version.'
     sed -i -E "s/^pkgver=.*/pkgver=$version/" "${metadata[1]}"
+    sed -i -E "s/^version = \"$current\"$/version = \"$version\"/" server/Cargo.toml
+    sed -i "/^name = \"localbell\"$/ { n; s/^version = .*/version = \"$version\"/; }" server/Cargo.lock
     (cd packaging/arch && makepkg --printsrcinfo > .SRCINFO)
     [[ $(read_version < "${metadata[0]}") == "$version" && $(read_code < "${metadata[0]}") == "$((code + 1))" ]]
     grep -qx "pkgver=$version" "${metadata[1]}"
@@ -129,7 +139,7 @@ GIT_INDEX_FILE=$index git checkout-index -a --prefix="$work/tree/"
     "$apksigner" verify "$apk"
     badging=$("$aapt" dump badging "$apk")
     [[ $badging == *"package: name='io.github.fredjunior54.localbell' versionCode='$((code + 1))' versionName='$version'"* ]] || fail 'APK metadata does not match the release.'
-    archive=dist/localbell-linux-amd64.tar.gz
+    archive=dist/localbell-$version-linux-amd64.tar.gz
     [[ $(tar -tzf "$archive") == localbell && -x dist/localbell ]]
     [[ $(file -b dist/localbell) == *'ELF 64-bit'*'x86-64'* && $(dist/localbell --version) == "$version" ]]
     mkdir "$work/assets"
@@ -156,4 +166,4 @@ mv "$work/assets" "$release_dir/$tag"
 printf 'Verified release assets: %s/%s\n' "$release_dir" "$tag"
 git push --atomic origin "HEAD:refs/heads/$branch" "refs/tags/$tag:refs/tags/$tag"
 gh release create "$tag" --repo "$repo" --verify-tag --generate-notes \
-    "$release_dir/$tag/localbell-$version.apk" "$release_dir/$tag/localbell-linux-amd64.tar.gz"
+    "$release_dir/$tag/localbell-$version.apk" "$release_dir/$tag/localbell-$version-linux-amd64.tar.gz"

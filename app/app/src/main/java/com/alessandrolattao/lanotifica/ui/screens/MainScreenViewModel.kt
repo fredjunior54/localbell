@@ -92,10 +92,34 @@ class MainScreenViewModel(
         viewModelScope.launch { settingsRepository.setServiceEnabled(enabled) }
     }
 
-    fun setServerConfig(token: String, fingerprint: String) {
-        viewModelScope.launch {
-            settingsRepository.setServerConfig(token, fingerprint)
-            healthMonitor.forceCheck()
+    private val _pairingMessage = MutableStateFlow<String?>(null)
+    val pairingMessage = _pairingMessage.asStateFlow()
+    private var pairingJob: kotlinx.coroutines.Job? = null
+
+    fun pair(qrData: String) {
+        pairingJob?.cancel()
+        val pairing = com.alessandrolattao.lanotifica.util.QrCodeParser.parse(qrData)
+        if (pairing == null) {
+            _pairingMessage.value = "Invalid LocalBell QR code. Generate a new code on the desktop."
+            return
+        }
+        pairingJob = viewModelScope.launch {
+            _pairingMessage.value = "Pairing with LocalBell…"
+            try {
+                val token =
+                    com.alessandrolattao.lanotifica.network.PairingClient.exchange(
+                        pairing,
+                        android.os.Build.MODEL,
+                    )
+                settingsRepository.setServerConfig(token, pairing.fingerprint, pairing.url)
+                _pairingMessage.value = null
+                healthMonitor.forceCheck()
+            } catch (ex: kotlinx.coroutines.CancellationException) {
+                throw ex
+            } catch (_: Exception) {
+                _pairingMessage.value =
+                    "Could not pair. Check the local network and scan a new code."
+            }
         }
     }
 

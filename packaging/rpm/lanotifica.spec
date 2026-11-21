@@ -1,5 +1,4 @@
 %global debug_package %{nil}
-%define _userunitdir %{_prefix}/lib/systemd/user
 
 Name:           lanotifica
 Version:        %{pkg_version}
@@ -18,19 +17,11 @@ them on Linux desktop via D-Bus notifications.
 %autosetup
 
 %install
-install -Dm755 bin/%{name} %{buildroot}%{_bindir}/%{name}
-install -Dm644 packaging/%{name}.service %{buildroot}%{_userunitdir}/%{name}.service
-
-%post
-echo ""
-echo "To enable LaNotifica for your user, run:"
-echo "  systemctl --user enable --now lanotifica"
-echo ""
+install -Dm755 bin/localbell %{buildroot}%{_bindir}/localbell
 
 %files
 %license LICENSE
-%{_bindir}/%{name}
-%{_userunitdir}/%{name}.service
+%{_bindir}/localbell
 
 %changelog
 * Wed Dec 10 2025 Alessandro Lattao <alessandro@lattao.com>

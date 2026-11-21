@@ -2,8 +2,7 @@
 
 SERVER_DIR = server
 APP_DIR = app
-GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.0.0")
-VERSION ?= $(shell echo "$(GIT_VERSION)" | sed 's/^v//; s/-/./g')
+VERSION ?= $(shell sed -n 's/^version = "\(.*\)"/\1/p' $(SERVER_DIR)/Cargo.toml)
 DEB_VERSION := $(shell echo "$(VERSION)" | sed 's/^\([0-9]\)/\1/; t; s/^/0.0.0+git./')
 
 help: ## Show available commands
@@ -13,12 +12,13 @@ help: ## Show available commands
 	@echo ""
 
 build: ## Build the binary
-	cd $(SERVER_DIR) && go build -ldflags "-s -w -X main.Version=$(VERSION)" -o ../bin/lanotifica ./cmd/lanotifica
+	cargo build --locked --release --manifest-path $(SERVER_DIR)/Cargo.toml
+	install -Dm755 $(SERVER_DIR)/target/release/localbell bin/localbell
 
 test: test-server test-app ## Run all tests
 
 test-server: ## Run server tests
-	cd $(SERVER_DIR) && go mod download && go test -v ./...
+	cargo test --locked --manifest-path $(SERVER_DIR)/Cargo.toml
 
 test-app: ## Run Android app tests
 	cd $(APP_DIR) && ./gradlew test --quiet
@@ -26,56 +26,49 @@ test-app: ## Run Android app tests
 lint: lint-server lint-app ## Run all linters
 
 lint-server: ## Run server linter
-	@which golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	cd $(SERVER_DIR) && golangci-lint run
+	cargo fmt --check --manifest-path $(SERVER_DIR)/Cargo.toml
+	cargo clippy --locked --all-targets --all-features --manifest-path $(SERVER_DIR)/Cargo.toml -- -D warnings
 
 lint-app: ## Run Android app linter
 	cd $(APP_DIR) && ./gradlew lint detekt spotlessCheck
 
 format: format-server format-app ## Format all code
 
-format-server: ## Format Go code
-	cd $(SERVER_DIR) && go fmt ./...
+format-server: ## Format Rust code
+	cargo fmt --manifest-path $(SERVER_DIR)/Cargo.toml
 
 format-app: ## Format Kotlin code
 	cd $(APP_DIR) && ./gradlew spotlessApply
 
-up: ## Start dev server with hot reload
-	cd $(SERVER_DIR) && air
+up: ## Start the desktop app
+	cargo run --locked --manifest-path $(SERVER_DIR)/Cargo.toml
 
 rpm: build ## Build RPM package
 	mkdir -p ~/rpmbuild/SOURCES ~/rpmbuild/SPECS ~/rpmbuild/BUILD ~/rpmbuild/RPMS ~/rpmbuild/SRPMS
 	tar --transform "s,^,lanotifica-$(VERSION)/," \
 	    -czf ~/rpmbuild/SOURCES/lanotifica-$(VERSION).tar.gz \
-	    bin/ packaging/ LICENSE
+	    bin/localbell packaging/ LICENSE
 	rpmbuild -bb --define "pkg_version $(VERSION)" packaging/rpm/lanotifica.spec
 
 deb: build ## Build DEB package
 	rm -rf /tmp/lanotifica-deb
 	mkdir -p dist
 	mkdir -p /tmp/lanotifica-deb/usr/bin
-	mkdir -p /tmp/lanotifica-deb/usr/lib/systemd/user
 	mkdir -p /tmp/lanotifica-deb/usr/share/doc/lanotifica
 	mkdir -p /tmp/lanotifica-deb/DEBIAN
-	cp bin/lanotifica /tmp/lanotifica-deb/usr/bin/
-	cp packaging/lanotifica.service /tmp/lanotifica-deb/usr/lib/systemd/user/
+	cp bin/localbell /tmp/lanotifica-deb/usr/bin/
 	cp LICENSE /tmp/lanotifica-deb/usr/share/doc/lanotifica/copyright
 	sed 's/$${VERSION}/$(DEB_VERSION)/' packaging/deb/DEBIAN/control > /tmp/lanotifica-deb/DEBIAN/control
-	cp packaging/deb/DEBIAN/postinst /tmp/lanotifica-deb/DEBIAN/
-	chmod 755 /tmp/lanotifica-deb/DEBIAN/postinst
 	dpkg-deb --root-owner-group --build /tmp/lanotifica-deb dist/lanotifica_$(DEB_VERSION)_amd64.deb
 
-tarball: build ## Build binary tarball for AUR (linux-amd64)
-	mkdir -p dist /tmp/lanotifica-tarball
-	cp bin/lanotifica /tmp/lanotifica-tarball/
-	cp packaging/lanotifica.service /tmp/lanotifica-tarball/
-	tar -czf dist/lanotifica-linux-amd64.tar.gz -C /tmp/lanotifica-tarball .
-	rm -rf /tmp/lanotifica-tarball
+tarball: release-linux ## Build the Linux desktop archive
 
 clean: ## Remove build artifacts
 	rm -rf bin/ dist/
 
-release-linux: ## Build the binary-only LocalBell Linux release archive
+release-linux: ## Build the versioned Linux amd64 desktop archive
+	cargo build --locked --release --target x86_64-unknown-linux-gnu --manifest-path $(SERVER_DIR)/Cargo.toml
 	mkdir -p dist
-	cd $(SERVER_DIR) && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o ../dist/localbell ./cmd/lanotifica
-	tar -czf dist/localbell-linux-amd64.tar.gz -C dist localbell
+	install -m755 $(SERVER_DIR)/target/x86_64-unknown-linux-gnu/release/localbell dist/localbell
+	test "$$(dist/localbell --version)" = "$(VERSION)"
+	tar -czf dist/localbell-$(VERSION)-linux-amd64.tar.gz -C dist localbell

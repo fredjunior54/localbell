@@ -88,15 +88,14 @@ class NotificationForwarderService : NotificationListenerService() {
             try {
                 settingsRepository.addKnownApp(sbn.packageName)
                 if (!shouldForward(sbn.packageName, sbn.key, sbn.notification)) return@launch
+                val pairing = settingsRepository.pairing.first() ?: return@launch
                 val serverUrl =
-                    healthMonitor.getServerUrlIfConnected()
+                    healthMonitor.getServerUrlIfConnected(pairing.token)
                         ?: run {
                             Log.d(TAG, "Server not connected, skipping notification")
                             return@launch
                         }
-                val authToken = settingsRepository.authToken.first()
-                val certFingerprint = settingsRepository.certFingerprint.first()
-                sendNotification(sbn, serverUrl, authToken, certFingerprint)
+                sendNotification(sbn, serverUrl, pairing.token, pairing.fingerprint)
             } catch (e: Exception) {
                 Log.e(TAG, "Error forwarding notification", e)
             }
@@ -213,18 +212,12 @@ class NotificationForwarderService : NotificationListenerService() {
                 val enabled = settingsRepository.serviceEnabled.first()
                 if (!enabled) return@launch
 
-                val authToken = settingsRepository.authToken.first()
-                if (authToken.isBlank()) return@launch
-
-                val certFingerprint = settingsRepository.certFingerprint.first()
-                if (certFingerprint.isBlank()) return@launch
-
-                val serverUrl = healthMonitor.getServerUrlIfConnected() ?: return@launch
-
-                Log.d(TAG, "Dismissing notification: ${sbn.key}")
+                val pairing = settingsRepository.pairing.first() ?: return@launch
+                val serverUrl =
+                    healthMonitor.getServerUrlIfConnected(pairing.token) ?: return@launch
 
                 try {
-                    val api = ApiClient.getApi(serverUrl, authToken, certFingerprint)
+                    val api = ApiClient.getApi(serverUrl, pairing.token, pairing.fingerprint)
                     val response = api.dismissNotification(DismissRequest(key = sbn.key))
 
                     if (response.isSuccessful) {

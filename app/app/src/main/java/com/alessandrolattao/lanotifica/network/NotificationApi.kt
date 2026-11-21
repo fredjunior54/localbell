@@ -20,9 +20,9 @@ data class DismissRequest(val key: String)
 data class NotificationResponse(val status: String)
 
 interface NotificationApi {
-    @POST("/notification")
+    @POST("/v1/notification")
     suspend fun sendNotification(@Body request: NotificationRequest): Response<NotificationResponse>
 
-    @HTTP(method = "DELETE", path = "/notification", hasBody = true)
+    @HTTP(method = "DELETE", path = "/v1/notification", hasBody = true)
     suspend fun dismissNotification(@Body request: DismissRequest): Response<NotificationResponse>
 }

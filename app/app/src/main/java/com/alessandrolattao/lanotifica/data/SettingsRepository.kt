@@ -103,35 +103,59 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    private val protocol = androidx.datastore.preferences.core.intPreferencesKey("pairing_protocol")
+
+    class Pairing(val token: String, val fingerprint: String, val url: String)
+
+    val pairing: Flow<Pairing?> =
+        context.dataStore.data.map { prefs ->
+            if (prefs[protocol] != 1) return@map null
+            val token = prefs[AUTH_TOKEN]?.let { decrypt(it) }.orEmpty()
+            val fingerprint = prefs[CERT_FINGERPRINT]?.let { decrypt(it) }.orEmpty()
+            val url = prefs[CACHED_SERVER_URL].orEmpty()
+            if (token.isBlank() || fingerprint.isBlank() || url.isBlank()) null
+            else Pairing(token, fingerprint, url)
+        }
+
     val authToken: Flow<String> =
-        context.dataStore.data.map { prefs -> prefs[AUTH_TOKEN]?.let { decrypt(it) } ?: "" }
+        context.dataStore.data.map { prefs ->
+            prefs[AUTH_TOKEN]?.takeIf { prefs[protocol] == 1 }?.let { decrypt(it) } ?: ""
+        }
 
     val certFingerprint: Flow<String> =
-        context.dataStore.data.map { prefs -> prefs[CERT_FINGERPRINT]?.let { decrypt(it) } ?: "" }
+        context.dataStore.data.map { prefs ->
+            prefs[CERT_FINGERPRINT]?.takeIf { prefs[protocol] == 1 }?.let { decrypt(it) } ?: ""
+        }
 
     val serviceEnabled: Flow<Boolean> =
         context.dataStore.data.map { prefs -> prefs[SERVICE_ENABLED] ?: false }
 
-    val cachedServerUrl: Flow<String> =
-        context.dataStore.data.map { prefs -> prefs[CACHED_SERVER_URL] ?: "" }
+    val isConfigured: Flow<Boolean> = pairing.map { it != null }
 
-    val isConfigured: Flow<Boolean> =
-        context.dataStore.data.map { prefs ->
-            val token = prefs[AUTH_TOKEN]?.let { decrypt(it) } ?: ""
-            val fingerprint = prefs[CERT_FINGERPRINT]?.let { decrypt(it) } ?: ""
-            token.isNotBlank() && fingerprint.isNotBlank()
-        }
-
-    suspend fun setServerConfig(token: String, fingerprint: String) {
+    suspend fun setServerConfig(token: String, fingerprint: String, url: String) {
         context.dataStore.edit { prefs ->
             prefs[AUTH_TOKEN] = encrypt(token)
             prefs[CERT_FINGERPRINT] = encrypt(fingerprint)
-            prefs.remove(CACHED_SERVER_URL)
+            prefs[CACHED_SERVER_URL] = url
+            prefs[protocol] = 1
         }
     }
 
-    suspend fun setCachedServerUrl(url: String) {
-        context.dataStore.edit { prefs -> prefs[CACHED_SERVER_URL] = url }
+    suspend fun clearPairingIfCurrent(token: String) {
+        context.dataStore.edit { prefs ->
+            if (prefs[AUTH_TOKEN]?.let { decrypt(it) } == token) {
+                prefs.remove(AUTH_TOKEN)
+                prefs.remove(CERT_FINGERPRINT)
+                prefs.remove(CACHED_SERVER_URL)
+                prefs.remove(protocol)
+            }
+        }
+    }
+
+    suspend fun setCachedServerUrl(url: String, token: String) {
+        context.dataStore.edit { prefs ->
+            if (prefs[AUTH_TOKEN]?.let { decrypt(it) } == token) prefs[CACHED_SERVER_URL] = url
+        }
     }
 
     suspend fun setServiceEnabled(enabled: Boolean) {

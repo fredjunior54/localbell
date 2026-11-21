@@ -2,6 +2,7 @@ package com.alessandrolattao.lanotifica.util
 
 import android.annotation.SuppressLint
 import java.security.MessageDigest
+import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
@@ -38,10 +39,11 @@ object CryptoUtils {
             }
 
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-                check(!chain.isNullOrEmpty()) { "No certificate provided by server" }
+                if (chain.isNullOrEmpty())
+                    throw CertificateException("No certificate provided by server")
                 val serverFingerprint = calculateFingerprint(chain[0])
-                check(fingerprintsMatch(serverFingerprint, expectedFingerprint)) {
-                    "Certificate fingerprint mismatch! Expected: $expectedFingerprint, Got: $serverFingerprint"
+                if (!fingerprintsMatch(serverFingerprint, expectedFingerprint)) {
+                    throw CertificateException("Certificate fingerprint mismatch")
                 }
             }
 
@@ -68,6 +70,13 @@ object CryptoUtils {
         return OkHttpClient.Builder()
             .sslSocketFactory(sslContext.socketFactory, trustManager)
             .hostnameVerifier { _, _ -> true } // We verify via fingerprint instead
+            .addInterceptor { chain ->
+                if (!chain.request().url.isHttps) throw java.io.IOException("HTTPS is required")
+                chain.proceed(chain.request())
+            }
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .proxy(java.net.Proxy.NO_PROXY)
             .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
             .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
             .writeTimeout(writeTimeoutMs, TimeUnit.MILLISECONDS)

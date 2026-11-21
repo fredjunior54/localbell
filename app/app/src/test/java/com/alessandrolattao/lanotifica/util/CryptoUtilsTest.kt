@@ -2,6 +2,7 @@ package com.alessandrolattao.lanotifica.util
 
 import io.mockk.every
 import io.mockk.mockk
+import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -88,8 +89,8 @@ class CryptoUtilsTest {
 
         try {
             trustManager.checkServerTrusted(null, "RSA")
-            fail("Expected IllegalStateException")
-        } catch (e: IllegalStateException) {
+            fail("Expected CertificateException")
+        } catch (e: CertificateException) {
             assertTrue(e.message?.contains("No certificate") == true)
         }
     }
@@ -100,8 +101,8 @@ class CryptoUtilsTest {
 
         try {
             trustManager.checkServerTrusted(emptyArray(), "RSA")
-            fail("Expected IllegalStateException")
-        } catch (e: IllegalStateException) {
+            fail("Expected CertificateException")
+        } catch (e: CertificateException) {
             assertTrue(e.message?.contains("No certificate") == true)
         }
     }
@@ -133,8 +134,8 @@ class CryptoUtilsTest {
 
         try {
             trustManager.checkServerTrusted(arrayOf(mockCert), "RSA")
-            fail("Expected IllegalStateException for fingerprint mismatch")
-        } catch (e: IllegalStateException) {
+            fail("Expected CertificateException for fingerprint mismatch")
+        } catch (e: CertificateException) {
             assertTrue(e.message?.contains("mismatch") == true)
         }
     }

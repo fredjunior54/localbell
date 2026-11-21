@@ -10,7 +10,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Discovers LaNotifica server on the local network using mDNS/DNS-SD. Uses Android's built-in
+ * Discovers LocalBell server on the local network using mDNS/DNS-SD. Uses Android's built-in
  * NsdManager API.
  */
 class ServiceDiscovery(context: Context) {
@@ -19,7 +19,7 @@ class ServiceDiscovery(context: Context) {
 
     companion object {
         private const val TAG = "ServiceDiscovery"
-        private const val SERVICE_TYPE = "_lanotifica._tcp."
+        private const val SERVICE_TYPE = "_localbell-v1._tcp."
         private const val DISCOVERY_TIMEOUT_MS = 10_000L
     }
 
@@ -29,14 +29,14 @@ class ServiceDiscovery(context: Context) {
     }
 
     /**
-     * Discovers the LaNotifica server on the local network. Returns the server info if found within
+     * Discovers the LocalBell server on the local network. Returns the server info if found within
      * timeout, null otherwise.
      */
-    suspend fun discoverServer(): DiscoveredServer? {
-        return withTimeoutOrNull(DISCOVERY_TIMEOUT_MS) { discoverServerInternal() }
+    suspend fun discoverServer(fingerprint: String): DiscoveredServer? {
+        return withTimeoutOrNull(DISCOVERY_TIMEOUT_MS) { discoverServerInternal(fingerprint) }
     }
 
-    private suspend fun discoverServerInternal(): DiscoveredServer? =
+    private suspend fun discoverServerInternal(fingerprint: String): DiscoveredServer? =
         suspendCancellableCoroutine { continuation ->
             var discoveryListener: NsdManager.DiscoveryListener? = null
             var serviceInfoCallback: NsdManager.ServiceInfoCallback? = null
@@ -79,7 +79,14 @@ class ServiceDiscovery(context: Context) {
 
                     override fun onServiceFound(serviceInfo: NsdServiceInfo) {
                         Log.d(TAG, "Service found: ${serviceInfo.serviceName}")
-                        if (!resolved) {
+                        if (
+                            !resolved &&
+                                serviceInfo.serviceName.equals(
+                                    "LocalBell-${fingerprint.take(16)}",
+                                    true,
+                                ) &&
+                                serviceInfoCallback == null
+                        ) {
                             serviceInfoCallback =
                                 object : NsdManager.ServiceInfoCallback {
                                     override fun onServiceInfoCallbackRegistrationFailed(
@@ -98,7 +105,20 @@ class ServiceDiscovery(context: Context) {
 
                                     override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
                                         val hostAddress =
-                                            serviceInfo.hostAddresses.firstOrNull()?.hostAddress
+                                            serviceInfo.hostAddresses
+                                                .mapNotNull { it.hostAddress }
+                                                .firstOrNull {
+                                                    com.alessandrolattao.lanotifica.util
+                                                        .QrCodeParser
+                                                        .isPrivateIpv4(it)
+                                                }
+                                        if (
+                                            serviceInfo.attributes["fp"]?.decodeToString() !=
+                                                fingerprint ||
+                                                hostAddress == null ||
+                                                serviceInfo.port !in 1024..65535
+                                        )
+                                            return
                                         Log.d(
                                             TAG,
                                             "Service resolved: $hostAddress:${serviceInfo.port}",

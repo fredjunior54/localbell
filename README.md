@@ -3,6 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
+<p align="center"><strong>Version 1.3.5</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -10,15 +11,23 @@
   <a href="https://github.com/fredjunior54/localbell/actions/workflows/ci.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/fredjunior54/localbell/ci.yml?style=for-the-badge&label=CI" alt="CI">
   </a>
-  <a href="https://github.com/fredjunior54/localbell/releases/latest">Download LocalBell</a>
+  <a href="https://github.com/fredjunior54/localbell/releases/latest">
+    <img src="https://img.shields.io/badge/Download-GitHub_Releases-181717?style=for-the-badge&logo=github" alt="Download from GitHub Releases">
+  </a>
+  <img src="https://img.shields.io/badge/Linux-x86--64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux x86-64">
+  <img src="https://img.shields.io/badge/Android-14%2B-3DDC84?style=for-the-badge&logo=android&logoColor=black" alt="Android 14 and later">
+  <img src="https://img.shields.io/badge/Desktop-Rust_%2B_egui-DEA584?style=for-the-badge&logo=rust&logoColor=black" alt="Rust and egui desktop app">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-AGPL--3.0-336699?style=for-the-badge" alt="AGPL-3.0 license">
+  </a>
 </p>
 
 Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a fork of **[LaNotifica](https://github.com/alessandrolattao/lanotifica)**, originally created by Alessandro Lattao.
 
 ## 🔔 How it works
 
-1. Run LocalBell on your Linux desktop.
-2. Open `https://localhost:19420`, set a PIN if prompted, and scan the pairing QR code with the Android app.
+1. Open LocalBell on your Linux desktop.
+2. Select **Pair a device** and scan the temporary QR code with LocalBell on Android.
 3. Grant notification access on Android and enable forwarding. LocalBell delivers notifications to your desktop over the local network.
 
 ## ✨ Features
@@ -31,51 +40,53 @@ Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a
 
 ### 🐧 Server (Linux)
 
-Download `localbell-linux-amd64.tar.gz` from [GitHub Releases](https://github.com/fredjunior54/localbell/releases/latest). From a terminal in your desktop session, extract and start it:
+Download `localbell-X.Y.Z-linux-amd64.tar.gz` from [GitHub Releases](https://github.com/fredjunior54/localbell/releases/latest). From a terminal in your desktop session, extract and start it:
 
 ```bash
-tar -xzf localbell-linux-amd64.tar.gz
+tar -xzf localbell-X.Y.Z-linux-amd64.tar.gz
 ./localbell
 ```
 
-Open `https://localhost:19420`. The server uses a self-signed certificate, so your browser may show a warning on first access.
+Run `./localbell --help` to list the CLI options or `./localbell --version` to print the installed version. Neither command opens a window.
+
+The app listens on HTTPS port `19420` on a private IPv4 interface. Click the tray icon to show or hide the window. Closing the window keeps forwarding active when a tray host is available; **Quit** stops LocalBell. GNOME may require the AppIndicator and KStatusNotifierItem Support extension.
 
 ### 📱 App (Android)
 
-Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. LocalBell can coexist with LaNotifica; pair it separately after installation.
+Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. LocalBell can coexist with LaNotifica. When upgrading from the old browser-based LocalBell, stop the old receiver first, update both apps, and pair again.
 
 ## 📋 Requirements
 
 | Component | Requirement |
 |-----------|-------------|
-| **Server** | Linux x86-64 with a D-Bus desktop notification service |
+| **Server** | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
 | **App** | Android 14 or later (API 34+) |
 | **Network** | Both devices on the same local network |
 
 ## 🔒 Security
 
 - **TLS** encrypts notifications in transit. The Android app pins the certificate fingerprint from the pairing QR code.
-- **Token authentication** protects the notification endpoint. Pairing is PIN-protected.
+- Each phone gets its own credential from a **one-time QR code** that expires after two minutes. Remove a phone in the desktop window to revoke its credential. No PIN or account is required.
 
 ## 🛠️ Development
 
 ### 📦 Prerequisites
 
-- Go 1.27.1 or later, GNU Make, and `golangci-lint` v2
+- A current stable Rust toolchain with Cargo, Clippy, and rustfmt, plus GNU Make and the Linux Wayland/X11 and EGL development libraries
 - JDK 21 or later supported by the Gradle wrapper, and Android SDK Platform 37
 - For local releases: Android SDK Build Tools, Arch `makepkg`, and GitHub CLI authenticated as a repository maintainer
 
 ### ⚙️ Setup
 
-Set `ANDROID_HOME` to your installed SDK. Optionally install the repository's pre-push checks with `lefthook install` if your local JDK matches the hook configuration.
+Set `ANDROID_HOME` to your installed SDK. Optionally install the repository's pre-push checks with `lefthook install`.
 
 ### 🧪 Build and test
 
 ```bash
-make build        # Build the development server
-make test         # Run Go and Android tests
-make lint         # Run Go and Android linters
-make format       # Format Go and Kotlin code
+make build        # Build the development desktop app
+make test         # Run Rust and Android tests
+make lint         # Run Rust and Android linters
+make format       # Format Rust and Kotlin code
 ```
 
 ### 🏷️ Publish a release
@@ -95,7 +106,7 @@ If the tag was pushed but release creation failed, retry with the same tag and t
 ```bash
 gh release create vX.Y.Z --repo fredjunior54/localbell --verify-tag --generate-notes \
   .git/localbell-releases/vX.Y.Z/localbell-X.Y.Z.apk \
-  .git/localbell-releases/vX.Y.Z/localbell-linux-amd64.tar.gz
+  .git/localbell-releases/vX.Y.Z/localbell-X.Y.Z-linux-amd64.tar.gz
 ```
 
 ## 📄 License
