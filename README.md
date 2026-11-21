@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/localbell.png" width="160" alt="LocalBell logo">
+  <img src="assets/localbell.png" width="360" alt="LocalBell logo">
 </p>
 
 <h1 align="center">LocalBell</h1>
@@ -57,11 +57,11 @@ Download and install `localbell-X.Y.Z.apk` from the same release. Android may as
 
 ## 📋 Requirements
 
-| Component | Requirement |
-|-----------|-------------|
-| **Server** | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
-| **App** | Android 14 or later (API 34+) |
-| **Network** | Both devices on the same local network |
+| Component   | Requirement                                                                          |
+| ----------- | ------------------------------------------------------------------------------------ |
+| **Server**  | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
+| **App**     | Android 14 or later (API 34+)                                                        |
+| **Network** | Both devices on the same local network                                               |
 
 ## 🔒 Security
 
