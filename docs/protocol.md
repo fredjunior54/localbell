@@ -42,3 +42,12 @@ An optional `icon_rgba` field contains standard base64 of exactly 48 × 48 × 4 
 The following framing is for the planned transport in which Android listens and Linux connects. The HTTPS endpoints above remain the active protocol until the new pairing, session, and delivery paths are integrated.
 
 Inside TLS, each frame starts with a four-byte unsigned big-endian payload length, followed by exactly that many bytes. The length excludes the header and must be between 1 and 32,768 bytes inclusive. Session messages are UTF-8 JSON objects. The framing layer does not interpret the payload. Receivers reject invalid lengths before allocation; end of stream between frames is a normal disconnect, but a partial header or payload is a protocol failure. After an error or timeout, close the connection rather than try to resynchronize. Use one writer per connection so concurrent messages cannot interleave. The shared byte-level fixture is `tests/fixtures/session-frames.hex`.
+
+The reverse transport uses TLS 1.3 with ALPN `localbell/1`. Android generates an EC P-256 server identity in Android Keystore. An enrolled Linux client verifies the SHA-256 digest of the exact TLS leaf and checks the TLS handshake signature; a valid TLS session alone does not authorize notification delivery. The listener permits RFC 1918, IPv4 link-local, and `100.64.0.0/10` peers before TLS.
+
+For enrollment, the desktop commits to its 32-byte challenge before receiving the phone's nonce. All transcript fields below are raw 32-byte values; `leaf` is the SHA-256 digest of the actual phone TLS leaf, and `code`, `nonce`, and `challenge` are fresh random values. `||` means byte concatenation and `NUL` means one zero byte.
+
+- Commitment: `SHA-256(ASCII("localbell-session-commit-v1") || NUL || leaf || code || challenge)`.
+- Comparison digest: `SHA-256(ASCII("localbell-session-compare-v1") || NUL || leaf || code || nonce || challenge)`.
+
+Interpret the first four comparison bytes as an unsigned big-endian number, reduce it modulo 1,000,000, and display it as six decimal digits. Keep the connection in enrollment mode until the commitment is verified and both users explicitly confirm. An enrollment connection must not receive notifications or an existing saved credential.
