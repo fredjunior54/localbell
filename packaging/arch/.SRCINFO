@@ -1,6 +1,6 @@
 pkgbase = lanotifica-bin
 	pkgdesc = Forward Android push notifications to your Linux desktop via D-Bus
-	pkgver = 1.3.5
+	pkgver = 1.3.6
 	pkgrel = 1
 	url = https://github.com/fredjunior54/localbell
 	arch = x86_64
@@ -9,9 +9,9 @@ pkgbase = lanotifica-bin
 	optdepends = libnotify: desktop notification daemon interaction
 	optdepends = dunst: lightweight notification daemon
 	optdepends = mako: notification daemon for Wayland
-	provides = lanotifica=1.3.5
+	provides = lanotifica=1.3.6
 	conflicts = lanotifica
-	source = https://github.com/fredjunior54/localbell/releases/download/v1.3.5/localbell-1.3.5-linux-amd64.tar.gz
+	source = https://github.com/fredjunior54/localbell/releases/download/v1.3.6/localbell-1.3.6-linux-amd64.tar.gz
 	sha256sums = SKIP
 
 pkgname = lanotifica-bin

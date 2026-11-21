@@ -23,3 +23,6 @@ dist/
 Thumbs.db
 
 /server/target/
+
+# Local agent plans and workspace files
+/.agents/
