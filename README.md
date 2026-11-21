@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.11</strong></p>
+<p align="center"><strong>Version 1.4.12</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 

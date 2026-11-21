@@ -1,6 +1,6 @@
 [package]
 name = "localbell"
-version = "1.4.11"
+version = "1.4.12"
 edition = "2024"
 
 [dependencies]
@@ -21,7 +21,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 socket2 = "0.6"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "io-util"] }
 tower-http = { version = "0.6", features = ["timeout"] }
 zbus = "5"
 

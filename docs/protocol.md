@@ -36,3 +36,9 @@ All delivery requests require `Authorization: Bearer TOKEN`; invalid credentials
 LAN mDNS advertises the `_localbell-v1._tcp.local.` service with fingerprint TXT key `fp`. This is only a hint for rediscovery: the app still verifies the saved TLS pin. Explicit overlay addresses and hostnames use their configured endpoint without mDNS fallback. The override does not advertise the overlay address via LAN mDNS.
 
 An optional `icon_rgba` field contains standard base64 of exactly 48 × 48 × 4 bytes, in row-major RGBA order with straight alpha. Android omits it when unavailable or if it would exceed the existing 32 KiB request limit. The receiver ignores invalid icon data and uses a generic icon instead. Valid artwork is passed directly to the desktop notification daemon as a D-Bus `image-data` hint; no icon is fetched or saved.
+
+## Reverse TLS session framing (not active)
+
+The following framing is for the planned transport in which Android listens and Linux connects. The HTTPS endpoints above remain the active protocol until the new pairing, session, and delivery paths are integrated.
+
+Inside TLS, each frame starts with a four-byte unsigned big-endian payload length, followed by exactly that many bytes. The length excludes the header and must be between 1 and 32,768 bytes inclusive. Session messages are UTF-8 JSON objects. The framing layer does not interpret the payload. Receivers reject invalid lengths before allocation; end of stream between frames is a normal disconnect, but a partial header or payload is a protocol failure. After an error or timeout, close the connection rather than try to resynchronize. Use one writer per connection so concurrent messages cannot interleave. The shared byte-level fixture is `tests/fixtures/session-frames.hex`.
