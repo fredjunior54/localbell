@@ -164,8 +164,8 @@ func TestConfigDir_NotEmpty(t *testing.T) {
 		t.Error("Expected ConfigDir to return non-empty string")
 	}
 
-	if !strings.Contains(dir, "lanotifica") {
-		t.Errorf("Expected ConfigDir to contain 'lanotifica', got: %s", dir)
+	if !strings.Contains(dir, "localbell") {
+		t.Errorf("Expected ConfigDir to contain 'localbell', got: %s", dir)
 	}
 }
 
@@ -175,7 +175,7 @@ func TestConfigDir_WithXDGConfigHome(t *testing.T) {
 
 	dir := ConfigDir()
 
-	expected := filepath.Join(customConfig, "lanotifica")
+	expected := filepath.Join(customConfig, "localbell")
 	if dir != expected {
 		t.Errorf("Expected %s, got %s", expected, dir)
 	}

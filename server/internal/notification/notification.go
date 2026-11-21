@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/TheCreeper/go-notify"
-	"github.com/alessandrolattao/lanotifica/internal/icon"
+	"github.com/fredjunior54/localbell/internal/icon"
 )
 
 // Request represents a notification request from the client.

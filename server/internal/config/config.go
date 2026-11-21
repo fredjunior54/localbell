@@ -1,4 +1,4 @@
-// Package config provides configuration management for LaNotifica.
+// Package config provides configuration management for LocalBell.
 package config
 
 import (
@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-// DefaultPort is the default port for the LaNotifica server.
+// DefaultPort is the default port for the LocalBell server.
 const DefaultPort = ":19420"
 
 // Config represents the application configuration.
@@ -51,13 +51,13 @@ var (
 
 func init() {
 	// Follow XDG Base Directory Specification.
-	// Use $XDG_CONFIG_HOME/lanotifica or ~/.config/lanotifica.
+	// Use $XDG_CONFIG_HOME/localbell or ~/.config/localbell.
 	xdgConfig := os.Getenv("XDG_CONFIG_HOME")
 	if xdgConfig == "" {
 		home, _ := os.UserHomeDir()
 		xdgConfig = filepath.Join(home, ".config")
 	}
-	configDir = filepath.Join(xdgConfig, "lanotifica")
+	configDir = filepath.Join(xdgConfig, "localbell")
 	configPath = filepath.Join(configDir, "config.json")
 }
 

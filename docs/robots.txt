@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://alessandrolattao.github.io/lanotifica/sitemap.xml
+Sitemap: https://fredjunior54.github.io/localbell/sitemap.xml

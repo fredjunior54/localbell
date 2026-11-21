@@ -179,7 +179,7 @@ GIT_INDEX_FILE=$index git checkout-index -a --prefix="$work/tree/"
     [[ $(read_version < "${metadata[0]}") == "$version" && $(read_code < "${metadata[0]}") == "$((code + 1))" ]]
     grep -qx "pkgver=$version" "${metadata[1]}"
     [[ $(sed -n 's/^[[:space:]]*pkgver = //p' "${metadata[2]}") == "$version" ]]
-    grep -q '^Version:.*%{pkg_version}' packaging/rpm/lanotifica.spec
+    grep -q '^Version:.*%{pkg_version}' packaging/rpm/localbell.spec
     grep -Fqx "Version: \${VERSION}" packaging/deb/DEBIAN/control
     env -u LOCALBELL_KEYSTORE -u KEYSTORE_PASSWORD -u KEY_ALIAS -u KEY_PASSWORD make test lint
     make release-linux VERSION="$version"

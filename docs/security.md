@@ -1,13 +1,13 @@
 ---
-title: LaNotifica Security
-description: LaNotifica security model — TLS 1.3 encryption, certificate pinning, token-based authentication, and local-only communication.
+title: LocalBell Security
+description: LocalBell security model — TLS 1.3 encryption, certificate pinning, token-based authentication, and local-only communication.
 ---
 
 # Security
 
 ## Design Principles
 
-LaNotifica is designed with privacy and security as core principles:
+LocalBell is designed with privacy and security as core principles:
 
 - **Local only** - All communication stays on your local network
 - **No cloud** - No data is sent to external servers
@@ -16,7 +16,7 @@ LaNotifica is designed with privacy and security as core principles:
 
 ## Authentication
 
-Each server generates a unique authentication token on first startup. This token is shared with the app via QR code and is required for all API requests.
+The QR code contains a short-lived, single-use pairing code. The app exchanges it over pinned HTTPS for a per-device bearer token. The receiver can revoke that token without affecting other devices.
 
 The token is stored securely on both the server and the app.
 

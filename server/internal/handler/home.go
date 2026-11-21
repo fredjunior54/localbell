@@ -16,7 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-//go:embed lanotifica.png
+//go:embed localbell.png
 var logoPNG []byte
 
 var (

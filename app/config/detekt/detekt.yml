@@ -114,6 +114,10 @@ potential-bugs:
 
 style:
   active: true
+  ForbiddenMethodCall:
+    active: true
+    methods:
+      - "androidx.compose.ui.graphics.Brush.linearGradient"
   MagicNumber:
     active: false
   ReturnCount:

@@ -2,8 +2,8 @@
 set -e
 
 echo ""
-echo "To enable LaNotifica for your user, run:"
-echo "  systemctl --user enable --now lanotifica"
+echo "To enable LocalBell for your user, run:"
+echo "  systemctl --user enable --now localbell"
 echo ""
 
 exit 0

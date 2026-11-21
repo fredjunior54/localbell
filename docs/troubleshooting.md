@@ -1,6 +1,6 @@
 ---
-title: LaNotifica Troubleshooting
-description: Fix common issues with LaNotifica — server not starting, notifications not appearing, mDNS discovery problems, and Android app connection issues.
+title: LocalBell Troubleshooting
+description: Fix common issues with LocalBell — server not starting, notifications not appearing, mDNS discovery problems, and Android app connection issues.
 ---
 
 # Troubleshooting
@@ -8,14 +8,13 @@ description: Fix common issues with LaNotifica — server not starting, notifica
 ## Server Issues
 
 **Server won't start**
-- Check if the service is running with your init system
+- Start the receiver from your Linux desktop session
 - Look at the logs for error messages
 - Make sure port 19420 is not in use by another application
 
-**QR code page doesn't load**
-- Verify the server is running
-- Try accessing `https://localhost:19420` directly
-- Accept the self-signed certificate warning in your browser
+**Pairing QR code does not appear**
+- Show the receiver window from the tray
+- Select **Pair a device** to generate a new QR code
 
 **Notifications don't appear on desktop**
 - Check if your desktop environment supports D-Bus notifications

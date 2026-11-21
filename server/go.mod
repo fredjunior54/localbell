@@ -1,4 +1,4 @@
-module github.com/alessandrolattao/lanotifica
+module github.com/fredjunior54/localbell
 
 go 1.27.1
 

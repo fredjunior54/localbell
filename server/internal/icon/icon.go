@@ -39,7 +39,7 @@ type Cache struct {
 	dir string
 }
 
-// NewCache creates a new icon cache using XDG_CACHE_HOME/lanotifica/icons.
+// NewCache creates a new icon cache using XDG_CACHE_HOME/localbell/icons.
 func NewCache() *Cache {
 	xdgCache := os.Getenv("XDG_CACHE_HOME")
 	if xdgCache == "" {
@@ -47,7 +47,7 @@ func NewCache() *Cache {
 		xdgCache = filepath.Join(home, ".cache")
 	}
 	return &Cache{
-		dir: filepath.Join(xdgCache, "lanotifica", "icons"),
+		dir: filepath.Join(xdgCache, "localbell", "icons"),
 	}
 }
 

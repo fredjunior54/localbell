@@ -1,0 +1,14 @@
+[Unit]
+Description=LocalBell - Android notification forwarder
+Documentation=https://github.com/fredjunior54/localbell
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/localbell
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

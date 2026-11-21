@@ -77,8 +77,8 @@ func create(certPath, keyPath string) (*Certificate, error) {
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"LaNotifica"},
-			CommonName:   "LaNotifica Server",
+			Organization: []string{"LocalBell"},
+			CommonName:   "LocalBell Server",
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0), // Valid for 10 years
@@ -89,7 +89,7 @@ func create(certPath, keyPath string) (*Certificate, error) {
 
 	// Add all local IPs and common names
 	template.IPAddresses = getLocalIPs()
-	template.DNSNames = []string{"localhost", "lanotifica.local"}
+	template.DNSNames = []string{"localhost", "localbell.local"}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
 	if err != nil {
@@ -170,5 +170,5 @@ func ConfigDir() string {
 		home, _ := os.UserHomeDir()
 		xdgConfig = filepath.Join(home, ".config")
 	}
-	return filepath.Join(xdgConfig, "lanotifica")
+	return filepath.Join(xdgConfig, "localbell")
 }

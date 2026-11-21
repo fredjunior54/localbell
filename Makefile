@@ -6,7 +6,7 @@ VERSION ?= $(shell sed -n 's/^version = "\(.*\)"/\1/p' $(SERVER_DIR)/Cargo.toml)
 DEB_VERSION := $(shell echo "$(VERSION)" | sed 's/^\([0-9]\)/\1/; t; s/^/0.0.0+git./')
 
 help: ## Show available commands
-	@echo "LaNotifica - Available commands:"
+	@echo "LocalBell - Available commands:"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 	@echo ""
@@ -45,21 +45,21 @@ up: ## Start the desktop app
 
 rpm: build ## Build RPM package
 	mkdir -p ~/rpmbuild/SOURCES ~/rpmbuild/SPECS ~/rpmbuild/BUILD ~/rpmbuild/RPMS ~/rpmbuild/SRPMS
-	tar --transform "s,^,lanotifica-$(VERSION)/," \
-	    -czf ~/rpmbuild/SOURCES/lanotifica-$(VERSION).tar.gz \
+	tar --transform "s,^,localbell-$(VERSION)/," \
+	    -czf ~/rpmbuild/SOURCES/localbell-$(VERSION).tar.gz \
 	    bin/localbell packaging/ LICENSE
-	rpmbuild -bb --define "pkg_version $(VERSION)" packaging/rpm/lanotifica.spec
+	rpmbuild -bb --define "pkg_version $(VERSION)" packaging/rpm/localbell.spec
 
 deb: build ## Build DEB package
-	rm -rf /tmp/lanotifica-deb
+	rm -rf /tmp/localbell-deb
 	mkdir -p dist
-	mkdir -p /tmp/lanotifica-deb/usr/bin
-	mkdir -p /tmp/lanotifica-deb/usr/share/doc/lanotifica
-	mkdir -p /tmp/lanotifica-deb/DEBIAN
-	cp bin/localbell /tmp/lanotifica-deb/usr/bin/
-	cp LICENSE /tmp/lanotifica-deb/usr/share/doc/lanotifica/copyright
-	sed 's/$${VERSION}/$(DEB_VERSION)/' packaging/deb/DEBIAN/control > /tmp/lanotifica-deb/DEBIAN/control
-	dpkg-deb --root-owner-group --build /tmp/lanotifica-deb dist/lanotifica_$(DEB_VERSION)_amd64.deb
+	mkdir -p /tmp/localbell-deb/usr/bin
+	mkdir -p /tmp/localbell-deb/usr/share/doc/localbell
+	mkdir -p /tmp/localbell-deb/DEBIAN
+	cp bin/localbell /tmp/localbell-deb/usr/bin/
+	cp LICENSE /tmp/localbell-deb/usr/share/doc/localbell/copyright
+	sed 's/$${VERSION}/$(DEB_VERSION)/' packaging/deb/DEBIAN/control > /tmp/localbell-deb/DEBIAN/control
+	dpkg-deb --root-owner-group --build /tmp/localbell-deb dist/localbell_$(DEB_VERSION)_amd64.deb
 
 tarball: release-linux ## Build the Linux desktop archive
 

@@ -19,15 +19,15 @@ type Server struct {
 	server *mdns.Server
 }
 
-// Start registers the LaNotifica service via mDNS.
-// The service will be discoverable as "lanotifica.local" on the local network.
+// Start registers the LocalBell service via mDNS.
+// The service will be discoverable as "localbell.local" on the local network.
 func Start(port string) (*Server, error) {
 	portNum, err := parsePort(port)
 	if err != nil {
 		return nil, fmt.Errorf("parsing port: %w", err)
 	}
 
-	info := []string{"LaNotifica notification forwarder"}
+	info := []string{"LocalBell notification forwarder"}
 
 	advertisedIP, err := advertisedIPv4()
 	if err != nil {
@@ -35,8 +35,8 @@ func Start(port string) (*Server, error) {
 	}
 
 	service, err := mdns.NewMDNSService(
-		"lanotifica",           // Instance name
-		"_lanotifica._tcp",     // Service type
+		"localbell",           // Instance name
+		"_localbell._tcp",     // Service type
 		"",                     // Domain (empty = .local)
 		"",                     // Host name (empty = use system hostname)
 		portNum,                // Port
@@ -52,7 +52,7 @@ func Start(port string) (*Server, error) {
 		return nil, fmt.Errorf("starting mDNS server: %w", err)
 	}
 
-	log.Printf("mDNS: advertising lanotifica at %s:%d via %s", service.HostName, portNum, advertisedIP)
+	log.Printf("mDNS: advertising localbell at %s:%d via %s", service.HostName, portNum, advertisedIP)
 
 	return &Server{server: server}, nil
 }

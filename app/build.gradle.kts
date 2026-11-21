@@ -1,5 +1,6 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 plugins {
+    base
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.spotless)
@@ -29,4 +30,14 @@ spotless {
         targetExclude("**/build/**")
         ktfmt().kotlinlangStyle()
     }
+}
+
+val detektDesign by tasks.registering {
+    group = "verification"
+    description = "Run Detekt with the shared Android design rules."
+    dependsOn(tasks.named("detekt"))
+}
+
+tasks.named("check") {
+    dependsOn(detektDesign)
 }

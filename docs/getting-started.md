@@ -1,6 +1,6 @@
 ---
-title: Getting Started with LaNotifica
-description: Install and configure LaNotifica to forward Android notifications to your Linux desktop. Supports Fedora, Ubuntu, Debian and all major desktop environments.
+title: Getting Started with LocalBell
+description: Install and configure LocalBell to forward Android notifications to your Linux desktop. Supports Fedora, Ubuntu, Debian and all major desktop environments.
 ---
 
 # Getting Started
@@ -17,38 +17,11 @@ description: Install and configure LaNotifica to forward Android notifications t
 **Network**
 - Both devices on the same local network (WiFi)
 
-## Step 1: Install the Server
+## Install and pair
 
-**Fedora / RHEL 10 / CentOS Stream 10:**
-```bash
-sudo dnf copr enable alessandrolattao/lanotifica
-sudo dnf install lanotifica
-```
+1. Download the Linux amd64 archive and signed Android APK from [GitHub Releases](https://github.com/fredjunior54/localbell/releases/latest).
+2. Extract the archive and run `./localbell` in your Linux desktop session.
+3. Install the APK on your phone and grant notification access when the app prompts you.
+4. Connect both devices to the same local network. Select **Pair a device** in the Linux window and scan the QR code from the Android app.
 
-**Ubuntu / Debian:**
-```bash
-curl -sLO $(curl -s https://api.github.com/repos/alessandrolattao/lanotifica/releases/latest | grep -o 'https://[^"]*\.deb') && sudo dpkg -i lanotifica_*.deb && rm lanotifica_*.deb
-```
-
-## Step 2: Start the Server
-
-```
-systemctl --user enable --now lanotifica
-```
-
-This starts the server and enables it to run automatically on login.
-
-## Step 3: Install the App
-
-Download from [Google Play](https://play.google.com/store/apps/details?id=com.alessandrolattao.lanotifica) or build from source.
-
-## Step 4: Connect
-
-1. Open `https://localhost:19420` in your browser
-2. Accept the self-signed certificate warning
-3. Open the LaNotifica app on your phone
-4. Grant notification access when prompted
-5. Tap "Scan QR Code" and scan the code shown on your desktop
-6. Enable the forwarding toggle
-
-Your phone notifications will now appear on your desktop.
+After upgrading to Android version 1.3.9 from an earlier version, re-enable notification access in Android Settings and pair again.

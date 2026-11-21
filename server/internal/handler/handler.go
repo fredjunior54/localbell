@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/alessandrolattao/lanotifica/internal/notification"
+	"github.com/fredjunior54/localbell/internal/notification"
 )
 
 // Notification handles POST requests to send notifications and DELETE to dismiss.

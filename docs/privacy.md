@@ -1,6 +1,6 @@
 ---
-title: LaNotifica Privacy Policy
-description: LaNotifica privacy policy — no data collection, no cloud, no tracking. All notification data stays on your local network.
+title: LocalBell Privacy Policy
+description: LocalBell privacy policy — no data collection, no cloud, no tracking. All notification data stays on your local network.
 ---
 
 # Privacy Policy
@@ -9,11 +9,11 @@ description: LaNotifica privacy policy — no data collection, no cloud, no trac
 
 ## Overview
 
-LaNotifica does not collect, store, or transmit any personal data to external servers.
+LocalBell does not collect, store, or transmit any personal data to external servers.
 
 ## What data is accessed
 
-LaNotifica requires **notification access permission** to read your Android notifications. This data is:
+LocalBell requires **notification access permission** to read your Android notifications. This data is:
 
 - Forwarded directly to your Linux desktop over your **local network (LAN) only**
 - Encrypted using TLS during transmission
@@ -33,7 +33,7 @@ LaNotifica requires **notification access permission** to read your Android noti
 
 All communication occurs exclusively within your local network:
 
-- Your Android device connects directly to the LaNotifica server running on your Linux desktop
+- Your Android device connects directly to the LocalBell server running on your Linux desktop
 - Connection is authenticated using a unique token generated during setup
 - All traffic is encrypted with TLS and certificate pinning
 - No internet connection is required after initial app download
@@ -44,16 +44,16 @@ All communication occurs exclusively within your local network:
 |------------|---------|
 | Notification Access | Read notifications to forward them to your desktop |
 | Camera | Scan QR code during initial setup |
-| Local Network | Communicate with LaNotifica server on your LAN |
+| Local Network | Communicate with LocalBell server on your LAN |
 
 ## Open Source
 
-LaNotifica is open source software licensed under AGPL-3.0. You can review the complete source code at:
+LocalBell is open source software licensed under AGPL-3.0. You can review the complete source code at:
 
-https://github.com/alessandrolattao/lanotifica
+https://github.com/fredjunior54/localbell
 
 ## Contact
 
 For questions or concerns about this privacy policy, please open an issue on GitHub:
 
-https://github.com/alessandrolattao/lanotifica/issues
+https://github.com/fredjunior54/localbell/issues

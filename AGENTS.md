@@ -8,6 +8,10 @@ LocalBell forwards Android push notifications to a Linux desktop via D-Bus.
 
 Pair from the desktop window with a temporary, single-use QR code. The tray hides or shows the window; Quit stops the receiver. The versioned LAN protocol is documented in `docs/protocol.md`.
 
+## Android design
+
+Read and follow [`DESIGN_RULES.md`](DESIGN_RULES.md) and the `ui-android` skill before changing Android UI or theme tokens. Run the applicable design audit before shipping.
+
 ## Build
 
 ```bash

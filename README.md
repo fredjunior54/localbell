@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.3.8</strong></p>
+<p align="center"><strong>Version 1.3.9</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -53,7 +53,7 @@ The app listens on HTTPS port `19420` on a private IPv4 interface. Click the tra
 
 ### 📱 App (Android)
 
-Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. LocalBell can coexist with LaNotifica. When upgrading from the old browser-based LocalBell, stop the old receiver first, update both apps, and pair again.
+Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. When upgrading from the old browser-based receiver, stop it first, update both apps, and pair again. After updating to Android version 1.3.9 from an earlier version, re-enable notification access in Android Settings and pair again.
 
 ## 📋 Requirements
 

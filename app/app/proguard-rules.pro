@@ -21,4 +21,4 @@
 -keep class * implements com.google.gson.JsonDeserializer
 
 # Keep data classes for serialization
--keep class com.alessandrolattao.lanotifica.network.** { *; }
+-keep class io.github.fredjunior54.localbell.network.** { *; }

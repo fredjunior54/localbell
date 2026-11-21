@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alessandrolattao/lanotifica/internal/notification"
+	"github.com/fredjunior54/localbell/internal/notification"
 )
 
 func TestNotification_Success(t *testing.T) {

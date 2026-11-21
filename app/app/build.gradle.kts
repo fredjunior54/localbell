@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.alessandrolattao.lanotifica"
+    namespace = "io.github.fredjunior54.localbell"
     compileSdk = 37
 
     signingConfigs {
@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.fredjunior54.localbell"
         minSdk = 34
         targetSdk = 37
-        versionCode = 26
-        versionName = "1.3.8"
+        versionCode = 27
+        versionName = "1.3.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

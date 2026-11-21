@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about_action">About LocalBell</string>
+    <string name="about_description">Forward notifications from your Android phone to your Linux desktop. Install the LocalBell receiver on your computer, then pair your phone.</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_maintainer">Maintained by Fred Junior</string>
+    <string name="about_project_page">Project page</string>
+    <string name="about_close">Close</string>
+</resources>

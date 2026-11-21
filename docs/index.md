@@ -1,19 +1,19 @@
 ---
 layout: default
-title: LaNotifica - Forward Android Notifications to Linux Desktop
+title: LocalBell - Forward Android Notifications to Linux Desktop
 description: >-
   Mirror your Android notifications to your Linux desktop over your local network.
   Encrypted with TLS, auto-discovery via mDNS, zero configuration.
   Works with GNOME, KDE, XFCE, i3, Sway. Open source (AGPL-3.0).
 ---
 
-# LaNotifica
+# LocalBell
 
 Forward your Android notifications to your Linux desktop.
 
 ## Overview
 
-LaNotifica is a simple tool that sends your phone notifications directly to your Linux desktop. WhatsApp, Telegram, calls — everything. All communication stays on your local network — no cloud, no accounts, no tracking.
+LocalBell is a simple tool that sends your phone notifications directly to your Linux desktop. WhatsApp, Telegram, calls — everything. All communication stays on your local network — no cloud, no accounts, no tracking.
 
 ## How It Works
 
@@ -45,37 +45,16 @@ The server and app find each other automatically using mDNS. All communication i
 
 ## Quick Start
 
-### Server (Linux)
-
-**Fedora / RHEL / CentOS Stream:**
-```bash
-sudo dnf copr enable alessandrolattao/lanotifica
-sudo dnf install lanotifica
-```
-
-**Ubuntu / Debian:**
-```bash
-curl -sLO $(curl -s https://api.github.com/repos/alessandrolattao/lanotifica/releases/latest | grep -o 'https://[^"]*\.deb') && sudo dpkg -i lanotifica_*.deb && rm lanotifica_*.deb
-```
-
-**Start the server:**
-```bash
-systemctl --user enable --now lanotifica
-```
-
-### App (Android)
-
-[Download on Google Play](https://play.google.com/store/apps/details?id=com.alessandrolattao.lanotifica) or build from source.
+Download the signed Android APK and Linux amd64 archive from [GitHub Releases](https://github.com/fredjunior54/localbell/releases/latest). Follow the [setup guide](getting-started.md) to install and pair them.
 
 ## Documentation
 
 - [Getting Started](getting-started.md) — Installation and setup guide
-- [Architecture](architecture.md) — How LaNotifica works under the hood
+- [Architecture](architecture.md) — How LocalBell works under the hood
 - [Security](security.md) — Encryption, authentication, and privacy details
 - [Troubleshooting](troubleshooting.md) — Common issues and solutions
 - [Privacy Policy](privacy.md)
 
 ## Links
 
-- [GitHub Repository](https://github.com/alessandrolattao/lanotifica)
-- [Download on Google Play](https://play.google.com/store/apps/details?id=com.alessandrolattao.lanotifica)
+- [GitHub Repository](https://github.com/fredjunior54/localbell)

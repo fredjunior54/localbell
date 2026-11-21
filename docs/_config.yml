@@ -1,10 +1,10 @@
-title: LaNotifica
+title: LocalBell
 description: >-
   Forward Android notifications to your Linux desktop over your local network.
   Encrypted, private, battery-friendly. No cloud, no accounts, no tracking.
   Open source alternative to Pushbullet and KDE Connect notification mirroring.
-url: https://alessandrolattao.github.io
-baseurl: /lanotifica
+url: https://fredjunior54.github.io
+baseurl: /localbell
 theme: jekyll-theme-minimal
 
 plugins:
@@ -12,19 +12,17 @@ plugins:
   - jekyll-sitemap
 
 author:
-  name: Alessandro Lattao
-  url: https://github.com/alessandrolattao
+  name: Fred Junior
+  url: https://github.com/fredjunior54
 
 social:
-  name: Alessandro Lattao
+  name: Fred Junior
   links:
-    - https://github.com/alessandrolattao
-
-google_site_verification: googlef914d516728b8b13
+    - https://github.com/fredjunior54
 
 defaults:
   - scope:
       path: ""
     values:
-      image: /assets/lanotifica.png
+      image: https://raw.githubusercontent.com/fredjunior54/localbell/main/assets/localbell.png
       lang: en

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.LaNotifica" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.LocalBell" parent="android:Theme.Material.Light.NoActionBar" />
 
-    <style name="Theme.LaNotifica.Splash" parent="Theme.LaNotifica">
+    <style name="Theme.LocalBell.Splash" parent="Theme.LocalBell">
         <item name="android:windowSplashScreenBackground">#e8e7e3</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_splash</item>
     </style>
