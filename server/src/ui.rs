@@ -193,8 +193,7 @@ impl eframe::App for App {
 pub fn run(state: Shared, status: Arc<Mutex<Network>>) -> Result<()> {
     let window = Arc::new(Window::default());
     window.visible.store(true, Ordering::Relaxed);
-    let icon =
-        eframe::icon_data::from_png_bytes(include_bytes!("../../assets/lanotifica-512.png"))?;
+    let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/localbell-icon.png"))?;
     let tray_icon = ksni::Icon {
         width: icon.width as i32,
         height: icon.height as i32,

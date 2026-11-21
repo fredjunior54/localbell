@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="assets/lanotifica-512.png" width="160" alt="LocalBell icon">
+  <img src="assets/localbell.png" width="160" alt="LocalBell logo">
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.3.7</strong></p>
+<p align="center"><strong>Version 1.3.8</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
