@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.8</strong></p>
+<p align="center"><strong>Version 1.4.9</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -28,7 +28,7 @@ Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a
 
 1. Open LocalBell on your Linux desktop.
 2. Open **Server Configuration** on Android, enter the receiver address and port, and tap **Pair**. Compare the six-digit number on both screens. If it matches, tap **Numbers match** on Android and select **Accept** on Linux.
-3. Grant **Notification Access** on Android, then enable **Forwarding** once the receiver is connected. LocalBell delivers notifications to your desktop over the local network.
+3. Grant **Notification Access** on Android, and check that **Forwarding** is active once the receiver is connected. New pairings enable forwarding by default; you can turn it off at any time. LocalBell delivers notifications to your desktop over the local network.
 
 On Android 17 or later, allow local network access if prompted while pairing.
 
@@ -39,6 +39,8 @@ For an optional Tailscale connection, see the [setup guide](docs/getting-started
 - **Pair by address:** Enter the receiver’s IP or hostname, compare a six-digit number, and approve. No QR scan or code entry.
 - **Encrypted, direct delivery:** Notifications travel over certificate-pinned HTTPS on your LAN or Tailscale network. No account or cloud relay.
 - **Native Linux notifications:** Get alerts through your desktop’s D-Bus notification service. Dismissing an alert on your phone also dismisses it on Linux.
+- **Test delivery:** Send a sample directly to a connected receiver without enabling forwarding.
+- **Android app artwork:** Compatible Linux notification daemons can display the source app icon without a cloud lookup.
 - **Per-app filters:** Choose which Android apps can forward notifications.
 
 ## 🚀 Quick start
@@ -129,3 +131,5 @@ After confirming that the GitHub release is public with both verified assets, th
 ## 📄 License
 
 [AGPL-3.0](LICENSE)
+
+Run `./localbell --font-licenses` for the embedded Linux UI font notices: [CaskaydiaCove](server/assets/CaskaydiaCove-LICENSE.txt) and [Symbols Nerd Font](server/assets/Symbols-Nerd-LICENSE.txt).

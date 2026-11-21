@@ -203,6 +203,7 @@ const HELP: &str = concat!(
     "  --listen=IP    Override the listening IPv4 address for this session\n",
     "  --port=PORT    Override the HTTPS port for this session\n",
     "  -h, --help     Print this help and exit\n",
+    "  --font-licenses  Print embedded font license notices\n",
     "  -V, --version  Print the version and exit\n",
 );
 
@@ -211,6 +212,7 @@ enum Command {
     Run(Option<Ipv4Addr>, Option<u16>),
     Help,
     Version,
+    FontLicenses,
 }
 
 fn command(args: impl IntoIterator<Item = impl AsRef<std::ffi::OsStr>>) -> Result<Command> {
@@ -222,6 +224,8 @@ fn command(args: impl IntoIterator<Item = impl AsRef<std::ffi::OsStr>>) -> Resul
             Some("-h" | "--help") => command = Command::Help,
             Some("-V" | "--version") if command != Command::Help => command = Command::Version,
             Some("-V" | "--version") => (),
+            Some("--font-licenses") if command != Command::Help => command = Command::FontLicenses,
+            Some("--font-licenses") => (),
             Some(value) if value.starts_with("--listen=") => {
                 let ip: Ipv4Addr = value[9..].parse().context("Invalid listen address")?;
                 listener::Settings {
@@ -264,6 +268,16 @@ fn main() -> Result<()> {
         }
         Command::Version => {
             println!("{}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        Command::FontLicenses => {
+            print!(concat!(
+                include_str!("../assets/NERD-FONTS.txt"),
+                "\n",
+                include_str!("../assets/CaskaydiaCove-LICENSE.txt"),
+                "\n",
+                include_str!("../assets/Symbols-Nerd-LICENSE.txt"),
+            ));
             return Ok(());
         }
         Command::Run(listen, port) => (listen, port),

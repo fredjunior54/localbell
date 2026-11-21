@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="test_notification_send">Send test notification</string>
+    <string name="test_notification_sending">Sending test notification…</string>
+    <string name="test_notification_sent">Test notification accepted by the receiver.</string>
+    <string name="test_notification_failed">Could not send the test notification. Check the receiver and try again.</string>
+    <string name="test_notification_title">LocalBell test notification</string>
+    <string name="test_notification_sample">Your phone reached the LocalBell desktop receiver.</string>
+</resources>

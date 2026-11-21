@@ -157,7 +157,6 @@ class NotificationForwarderService : NotificationListenerService() {
         val appName = getAppName(sbn.packageName)
         val urgency = mapUrgency(notification.channelId)
         val timeoutMs = notification.timeoutAfter.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
-        Log.d(TAG, "Forwarding notification from $appName: $title - $text (urgency=$urgency)")
         val request =
             NotificationRequest(
                 key = sbn.key,
@@ -170,7 +169,7 @@ class NotificationForwarderService : NotificationListenerService() {
             )
         try {
             val api = ApiClient.getApi(serverUrl, authToken, certFingerprint)
-            val response = api.sendNotification(request)
+            val response = api.sendNotification(request.withArtwork(this, sbn))
             if (response.isSuccessful) {
                 Log.d(TAG, "Notification forwarded successfully")
             } else {

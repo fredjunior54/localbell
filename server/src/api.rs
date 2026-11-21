@@ -39,6 +39,9 @@ impl Sink for DesktopSink {
                 ms if ms > 0 => Timeout::Milliseconds(ms as u32),
                 _ => Timeout::Default,
             });
+        if let Some(image) = n.icon_rgba.as_deref().and_then(app_image) {
+            item.icon("").image_data(image);
+        }
         if let Some(id) = previous {
             item.id(id);
         }
@@ -73,7 +76,22 @@ pub struct Notification {
     message: String,
     urgency: u8,
     timeout_ms: i32,
+    icon_rgba: Option<String>,
 }
+fn app_image(encoded: &str) -> Option<notify_rust::Image> {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    const SIDE: i32 = 48;
+    const BYTES: usize = 48 * 48 * 4;
+    if encoded.len() != BYTES / 3 * 4 {
+        return None;
+    }
+    let pixels = STANDARD.decode(encoded).ok()?;
+    if pixels.len() != BYTES {
+        return None;
+    }
+    notify_rust::Image::from_rgba(SIDE, SIDE, pixels).ok()
+}
+
 #[derive(Deserialize)]
 struct Dismiss {
     key: String,
@@ -293,6 +311,16 @@ mod tests {
     use super::*;
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
+
+    #[test]
+    fn accepts_only_bounded_rgba_app_artwork() {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        let valid = STANDARD.encode(vec![0_u8; 48 * 48 * 4]);
+        assert!(app_image(&valid).is_some());
+        assert!(app_image("").is_none());
+        assert!(app_image(&"*".repeat(valid.len())).is_none());
+        assert!(app_image(&(valid + "AAAA")).is_none());
+    }
 
     #[derive(Default)]
     struct Fake(Vec<Option<u32>>);

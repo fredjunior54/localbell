@@ -19,6 +19,69 @@ const TEXT: Color32 = Color32::from_rgb(205, 214, 244);
 const MAUVE: Color32 = Color32::from_rgb(203, 166, 247);
 const RED: Color32 = Color32::from_rgb(243, 139, 168);
 
+const TEXT_SIZE: f32 = 14.0;
+const SECTION_SIZE: f32 = 16.0;
+const GAP: f32 = 8.0;
+const SECTION_GAP: f32 = 16.0;
+const INSET: i8 = 16;
+const ACTION_HEIGHT: f32 = 32.0;
+const SETTINGS_ICON: char = '\u{f013}';
+const TRASH_ICON: char = '\u{f014}';
+const PHONE_ICON: char = '\u{f10b}';
+const SERVER_ICON: char = '\u{f233}';
+const PAIR_ICON: char = '\u{f023}';
+
+fn symbol_family() -> FontFamily {
+    FontFamily::Name("nerd-symbols".into())
+}
+
+fn section(ui: &mut egui::Ui, symbol: char, text: &str) {
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(symbol.to_string())
+                .family(symbol_family())
+                .size(SECTION_SIZE)
+                .color(MAUVE),
+        );
+        ui.label(egui::RichText::new(text).size(SECTION_SIZE).color(MAUVE));
+    });
+}
+
+fn action(
+    ui: &mut egui::Ui,
+    symbol: char,
+    text: &str,
+    color: Color32,
+    enabled: bool,
+) -> egui::Response {
+    let mut label = egui::text::LayoutJob::default();
+    label.append(
+        &symbol.to_string(),
+        0.0,
+        egui::TextFormat::simple(egui::FontId::new(TEXT_SIZE, symbol_family()), color),
+    );
+    label.append(
+        text,
+        GAP,
+        egui::TextFormat::simple(egui::FontId::proportional(TEXT_SIZE), color),
+    );
+    ui.add_enabled(
+        enabled,
+        egui::Button::new(label).min_size(egui::vec2(0.0, ACTION_HEIGHT)),
+    )
+}
+
+fn surface(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
+        .fill(MANTLE)
+        .corner_radius(8)
+        .inner_margin(egui::Margin::same(INSET))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            content(ui);
+        });
+}
+
 #[derive(Default)]
 struct Window {
     visible: AtomicBool,
@@ -126,7 +189,9 @@ impl eframe::App for App {
                     .fill(BASE)
                     .inner_margin(egui::Margin::same(20)),
             )
-            .show(ui, |ui| self.content(ui));
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| self.content(ui));
+            });
         self.listen_dialog(ui.ctx());
     }
 }
@@ -139,18 +204,23 @@ impl App {
         let mut apply = false;
         let mut cancel = false;
         let response = egui::Modal::new(egui::Id::new("listen-settings")).show(ctx, |ui| {
-            ui.heading("Listen settings");
+            ui.set_max_width(380.0);
+            section(ui, SETTINGS_ICON, "Listen Settings");
+            ui.add_space(SECTION_GAP);
             ui.label("Listen address");
             ui.text_edit_singleline(&mut form.address);
+            ui.add_space(GAP);
             ui.label("Port");
             ui.text_edit_singleline(&mut form.port);
+            ui.add_space(GAP);
             ui.label("Use 0.0.0.0 for all IPv4 interfaces, or enter one LAN or Tailscale address.");
             if let Some(error) = &form.error {
                 ui.colored_label(RED, error);
             }
+            ui.add_space(SECTION_GAP);
             ui.horizontal(|ui| {
-                apply = ui.button("Apply").clicked();
-                cancel = ui.button("Cancel").clicked();
+                apply = action(ui, '\u{f00c}', "Apply", MAUVE, true).clicked();
+                cancel = action(ui, '\u{f00d}', "Cancel", TEXT, true).clicked();
             });
         });
         if cancel || response.should_close() {
@@ -184,34 +254,40 @@ impl App {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
-        ui.heading(
-            egui::RichText::new("LocalBell")
-                .family(FontFamily::Name("display".into()))
-                .size(36.0)
-                .color(MAUVE),
-        );
-        ui.label(&status.message);
-        if status.applying {
-            ui.label("Applying listen settings…");
-        }
-        if let Some(error) = &status.error {
-            ui.colored_label(RED, error);
-        }
-        if ui
-            .add_enabled(!status.applying, egui::Button::new("Listen settings"))
+        ui.heading(egui::RichText::new("LocalBell").size(36.0).color(MAUVE));
+        ui.add_space(SECTION_GAP);
+        surface(ui, |ui| {
+            section(ui, SERVER_ICON, "Receiver");
+            ui.add_space(GAP);
+            ui.label(&status.message);
+            if status.applying {
+                ui.label("Applying listen settings…");
+            }
+            if let Some(error) = &status.error {
+                ui.colored_label(RED, error);
+            }
+            ui.add_space(GAP);
+            if action(
+                ui,
+                SETTINGS_ICON,
+                "Listen Settings",
+                MAUVE,
+                !status.applying,
+            )
             .clicked()
-        {
-            self.listen_form = Some(ListenForm {
-                address: status.settings.address.to_string(),
-                port: status.settings.port.to_string(),
-                error: None,
-            });
-        }
-        ui.separator();
+            {
+                self.listen_form = Some(ListenForm {
+                    address: status.settings.address.to_string(),
+                    port: status.settings.port.to_string(),
+                    error: None,
+                });
+            }
+        });
+        ui.add_space(SECTION_GAP);
         state.expire();
         if let Some(pair) = state.pairing.as_mut().filter(|p| p.comparison.is_some()) {
             pair.shown = true;
-            ui.heading("Pairing request");
+            section(ui, PAIR_ICON, "Pairing Request");
             ui.label(&pair.name);
             ui.label("Accept only if the six-digit number matches the phone.");
             ui.label(
@@ -242,20 +318,23 @@ impl App {
         } else if state.devices.is_empty() {
             ui.label("Enter the listening address on your phone to pair.");
         }
-        ui.separator();
-        ui.heading("Paired devices");
-        if state.devices.is_empty() {
-            ui.label("No devices paired.");
-        }
+        ui.add_space(SECTION_GAP);
         let mut remove = None;
-        for device in &state.devices {
-            ui.horizontal(|ui| {
-                ui.label(&device.name);
-                if ui.button("Remove").clicked() {
-                    remove = Some(device.id.clone());
-                }
-            });
-        }
+        surface(ui, |ui| {
+            section(ui, PHONE_ICON, "Paired Devices");
+            ui.add_space(GAP);
+            if state.devices.is_empty() {
+                ui.label("No devices paired.");
+            }
+            for device in &state.devices {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(&device.name);
+                    if action(ui, TRASH_ICON, "Remove", RED, true).clicked() {
+                        remove = Some(device.id.clone());
+                    }
+                });
+            }
+        });
         if let Some(id) = remove {
             self.error = state
                 .revoke(&id)
@@ -367,13 +446,37 @@ fn open_window(
             cc.egui_ctx.set_visuals_of(egui::Theme::Dark, visuals);
             let mut fonts = egui::FontDefinitions::default();
             fonts.font_data.insert(
-                "rajdhani".into(),
-                egui::FontData::from_static(include_bytes!("../assets/Rajdhani-Bold.ttf")).into(),
+                "caskaydia".into(),
+                egui::FontData::from_static(include_bytes!("../assets/CaskaydiaCove-UI.ttf"))
+                    .into(),
             );
+            fonts.font_data.insert(
+                "nerd-symbols".into(),
+                egui::FontData::from_static(include_bytes!("../assets/Symbols-Nerd-UI.ttf")).into(),
+            );
+            for family in [FontFamily::Proportional, FontFamily::Monospace] {
+                fonts
+                    .families
+                    .entry(family)
+                    .or_default()
+                    .insert(0, "caskaydia".into());
+            }
             fonts
                 .families
-                .insert(FontFamily::Name("display".into()), vec!["rajdhani".into()]);
+                .insert(symbol_family(), vec!["nerd-symbols".into()]);
             cc.egui_ctx.set_fonts(fonts);
+            cc.egui_ctx.style_mut_of(egui::Theme::Dark, |style| {
+                for (role, font) in &mut style.text_styles {
+                    font.size = if *role == egui::TextStyle::Heading {
+                        SECTION_SIZE
+                    } else {
+                        TEXT_SIZE
+                    };
+                }
+                style.spacing.button_padding = egui::vec2(12.0, 6.0);
+                style.spacing.item_spacing = egui::vec2(GAP, GAP);
+                style.spacing.window_margin = egui::Margin::same(INSET);
+            });
             Ok(Box::new(App {
                 state,
                 status,

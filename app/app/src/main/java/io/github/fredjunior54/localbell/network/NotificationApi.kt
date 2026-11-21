@@ -13,6 +13,7 @@ data class NotificationRequest(
     val message: String,
     val urgency: Int = 1,
     val timeout_ms: Int = -1,
+    val icon_rgba: String? = null,
 )
 
 data class DismissRequest(val key: String)

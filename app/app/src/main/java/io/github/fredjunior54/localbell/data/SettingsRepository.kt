@@ -156,6 +156,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setServerConfig(token: String, fingerprint: String, url: String) {
         context.dataStore.edit { prefs ->
+            if (prefs[AUTH_TOKEN]?.let { decrypt(it) } != token) prefs[SERVICE_ENABLED] = true
             prefs[AUTH_TOKEN] = encrypt(token)
             prefs[CERT_FINGERPRINT] = encrypt(fingerprint)
             prefs[CACHED_SERVER_URL] = url

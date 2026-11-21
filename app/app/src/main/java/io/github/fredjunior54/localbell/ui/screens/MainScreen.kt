@@ -245,6 +245,17 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
             viewModel.setServiceEnabled(enabled)
         },
         onAboutClick = { showAboutDialog = true },
+        content = {
+            val test by viewModel.testNotification.collectAsStateWithLifecycle()
+            val title = stringResource(R.string.test_notification_title)
+            val message = stringResource(R.string.test_notification_sample)
+            TestNotificationAction(
+                test,
+                isConfigured && connectionState == HealthMonitor.ConnectionState.CONNECTED,
+            ) {
+                viewModel.sendTestNotification(title, message)
+            }
+        },
         onFilterClick = { showBlacklist = true },
         blacklistedAppsCount = blacklistedAppsCount,
     )
@@ -267,6 +278,7 @@ fun MainScreenContent(
     onAboutClick: () -> Unit,
     onFilterClick: () -> Unit,
     blacklistedAppsCount: Int = 0,
+    content: @Composable () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -408,6 +420,8 @@ fun MainScreenContent(
                 isOk = connectionState == HealthMonitor.ConnectionState.CONNECTED,
                 onClick = null,
             )
+
+            content()
 
             // Forward Switch
             val isForwardingActive =

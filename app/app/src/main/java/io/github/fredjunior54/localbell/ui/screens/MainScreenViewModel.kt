@@ -6,9 +6,12 @@ import androidx.lifecycle.viewModelScope
 import io.github.fredjunior54.localbell.R
 import io.github.fredjunior54.localbell.data.SettingsRepository
 import io.github.fredjunior54.localbell.di.AppModule
+import io.github.fredjunior54.localbell.network.ApiClient
 import io.github.fredjunior54.localbell.network.HealthMonitor
+import io.github.fredjunior54.localbell.network.NotificationRequest
 import io.github.fredjunior54.localbell.network.PairingClient
 import io.github.fredjunior54.localbell.util.LanEndpoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainScreenViewModel(
     private val settingsRepository: SettingsRepository,
@@ -174,6 +178,46 @@ class MainScreenViewModel(
             } catch (_: org.json.JSONException) {
                 _pairingUi.value = PairingUi(message = R.string.pairing_connection_error)
             }
+        }
+    }
+
+    internal data class TestNotificationUi(val sending: Boolean = false, val message: Int? = null)
+
+    private val _testNotification = MutableStateFlow(TestNotificationUi())
+    internal val testNotification = _testNotification.asStateFlow()
+
+    fun sendTestNotification(title: String, message: String) {
+        if (_testNotification.value.sending) return
+        _testNotification.value = TestNotificationUi(sending = true)
+        viewModelScope.launch {
+            val sent =
+                try {
+                    val pairing = settingsRepository.pairing.first()
+                    val url = pairing?.let { healthMonitor.getServerUrlIfConnected(it.token) }
+                    if (pairing == null || url == null) false
+                    else
+                        withContext(Dispatchers.IO) {
+                            val api = ApiClient.getApi(url, pairing.token, pairing.fingerprint)
+                            api.sendNotification(
+                                    NotificationRequest(
+                                        key = "localbell-test:${java.util.UUID.randomUUID()}",
+                                        app_name = "LocalBell",
+                                        package_name = "io.github.fredjunior54.localbell",
+                                        title = title,
+                                        message = message,
+                                    ),
+                                )
+                                .isSuccessful
+                        }
+                } catch (_: java.io.IOException) {
+                    false
+                }
+            _testNotification.value =
+                TestNotificationUi(
+                    message =
+                        if (sent) R.string.test_notification_sent
+                        else R.string.test_notification_failed,
+                )
         }
     }
 
