@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.3.11</strong></p>
+<p align="center"><strong>Version 1.4.0</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -99,9 +99,9 @@ On `main`, run the version bump with a commit subject and the files for that ite
 ./scripts/bump-version.sh "docs: Clarify Linux installation" -- README.md
 ```
 
-The default bump is **patch**. Only Fred Junior can authorize `minor` or `major`. The script tests and builds locally, signs the APK, commits the selected changes with the synchronized version, and pushes `main`. It does not tag, publish, or install the APK.
+The default bump is **patch**. Only Fred Junior can authorize `minor` or `major`. The script tests and lints locally, commits the selected changes with the synchronized version, and pushes `main`. It does not build release artifacts, change `dist/`, tag, publish, or install the APK.
 
-`dist/` holds the current APK and Linux archive. The script retains verified artifacts, checksums, and the commit ID for each prepared build under `.git/localbell-releases/vX.Y.Z/` on the build machine.
+`dist/` holds the APK and Linux archive from the last release build, which can be older than the current code version. The publisher retains verified artifacts, checksums, and the commit ID under `.git/localbell-releases/vX.Y.Z/` on the build machine.
 
 When ready to publish, run this on the build machine with GitHub CLI authenticated and `jq` available:
 
@@ -109,7 +109,7 @@ When ready to publish, run this on the build machine with GitHub CLI authenticat
 ./scripts/publish-release.sh
 ```
 
-The script detects the version from the current commit and confirms the prepared build belongs to it. If that version is already public, it prints the release URL and exits without uploading or installing anything. To publish a different prepared version, pass it explicitly: `./scripts/publish-release.sh vX.Y.Z`. The script tags the prepared commit and publishes its two assets without rebuilding. If the upload is interrupted, rerun the same command. It reuses matching uploaded assets and never replaces a public release or moves a tag. If GitHub reports a mismatched or incomplete asset, review the draft before retrying. GitHub Actions only runs CI.
+The script detects the version from the current commit and verifies that the commit is on `origin/main`. If that version is already public, it prints the release URL and exits without uploading or installing anything. To publish a different version from `origin/main`, pass it explicitly: `./scripts/publish-release.sh vX.Y.Z`. The script builds the Linux binary and signed APK from the same isolated commit, verifies that their versions agree, refreshes `dist/`, then tags and publishes the two assets. If the upload is interrupted, rerun the same command. It reuses the retained build and matching uploaded assets and never replaces a public release or moves a tag. If GitHub reports a mismatched or incomplete asset, review the draft before retrying. GitHub Actions only runs CI.
 
 To automatically update an already-paired phone over Wi-Fi, run `adb devices -l` while the phone is online. Copy its exact serial ending in `._adb-tls-connect._tcp`, then save it once in fish (replace the example serial):
 

@@ -34,6 +34,88 @@ install_wifi_apk() {
     printf 'Wi-Fi APK install skipped: the configured phone is not online and authorized.\n'
 }
 
+refresh_dist() {
+    local dist=$1 assets=$2 history=$3 version=$4 entry archive
+    local managed='^localbell(-[0-9]+\.[0-9]+\.[0-9]+(\.apk|-linux-amd64\.tar\.gz)|-linux-amd64\.tar\.gz|-migration-test\.apk)?$'
+    [[ ! -L $dist ]] || fail 'Refusing to update a symlinked dist directory.'
+    mkdir -p -- "$dist"
+    local old=()
+    for entry in "$dist"/*; do
+        [[ ${entry##*/} =~ $managed ]] || continue
+        [[ -f $entry && ! -L $entry ]] || fail "Refusing to move unexpected dist entry: $entry"
+        old+=("$entry")
+    done
+    if ((${#old[@]})); then
+        archive=$(mktemp -d "$history/previous-dist.XXXXXXXX")
+        mv -- "${old[@]}" "$archive/"
+        printf 'Previous local outputs moved to: %s\n' "$archive"
+    fi
+    cp -- "$assets/localbell-$version.apk" "$assets/localbell-$version-linux-amd64.tar.gz" "$dist/"
+}
+
+build_release() (
+    for tool in make cargo java keytool file tar; do
+        command -v "$tool" >/dev/null || fail "Missing tool: $tool"
+    done
+    signing_dir=${ANDROID_SIGNING_DIR:-}
+    if [[ -z $signing_dir ]] && command -v fish >/dev/null; then
+        # shellcheck disable=SC2016
+        signing_dir=$(fish -c 'printf "%s" "$ANDROID_SIGNING_DIR"')
+    fi
+    [[ -n $signing_dir && -d $signing_dir ]] || fail 'Set ANDROID_SIGNING_DIR to the local signing directory.'
+    signing_dir=$(cd "$signing_dir" && pwd -P)
+    shopt -s nullglob
+    keys=("$signing_dir"/*.jks "$signing_dir"/*.keystore "$signing_dir"/*.p12)
+    [[ ${#keys[@]} -eq 1 && -f ${keys[0]} && -r ${keys[0]} ]] || fail 'Expected exactly one readable .jks, .keystore, or .p12 file.'
+    LOCALBELL_KEYSTORE=${keys[0]}
+    if [[ -z ${KEYSTORE_PASSWORD:-} && -r $signing_dir/release-password ]]; then
+        KEYSTORE_PASSWORD=$(<"$signing_dir/release-password")
+    fi
+    [[ -n ${KEYSTORE_PASSWORD:-} ]] || fail 'Provide KEYSTORE_PASSWORD or the local release-password file.'
+    export KEYSTORE_PASSWORD LOCALBELL_KEYSTORE
+    if [[ -z ${KEY_ALIAS:-} ]]; then
+        aliases=$(keytool -J-Duser.language=en -J-Duser.country=US -list -keystore "$LOCALBELL_KEYSTORE" -storepass:env KEYSTORE_PASSWORD 2>/dev/null | sed -n 's/^\([^,]*\),.*PrivateKeyEntry.*/\1/p') || fail 'Could not unlock the keystore; check the local signing configuration.'
+        [[ -n $aliases && $aliases != *$'\n'* ]] || fail 'Set KEY_ALIAS to the private key alias.'
+        KEY_ALIAS=$aliases
+    fi
+    export KEY_ALIAS KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}
+    sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
+    if [[ -z $sdk ]] && command -v fish >/dev/null; then
+        # shellcheck disable=SC2016
+        sdk=$(fish -c 'printf "%s" "$ANDROID_HOME"')
+    fi
+    [[ -d $sdk ]] || fail 'Set ANDROID_HOME to the Android SDK.'
+    apksigners=("$sdk"/build-tools/*/apksigner)
+    [[ ${#apksigners[@]} -gt 0 ]] || fail 'Install Android SDK build tools.'
+    apksigner=$(printf '%s\n' "${apksigners[@]}" | LC_ALL=C sort -V | tail -n 1)
+    aapt=${apksigner%/*}/aapt
+    [[ -x $apksigner && -x $aapt ]] || fail 'Android SDK signing or inspection tool is not executable.'
+
+    work=$(mktemp -d "$release_dir/work.XXXXXXXX")
+    trap 'rm -rf -- "${work:?}"' EXIT
+    mkdir "$work/tree"
+    GIT_INDEX_FILE=$work/index git read-tree "$commit"
+    GIT_INDEX_FILE=$work/index git checkout-index -a --prefix="$work/tree/"
+    cd "$work/tree"
+    code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' app/app/build.gradle.kts)
+    [[ $code =~ ^[1-9][0-9]*$ ]] || fail 'Invalid Android version code in the release commit.'
+    make release-linux VERSION="$version"
+    (cd app && ANDROID_HOME="$sdk" ./gradlew assembleRelease --no-daemon)
+    apk=app/app/build/outputs/apk/release/app-release.apk
+    "$apksigner" verify "$apk"
+    badging=$("$aapt" dump badging "$apk")
+    [[ $badging == *"package: name='io.github.fredjunior54.localbell' versionCode='$code' versionName='$version'"* ]] || fail 'APK metadata does not match the release.'
+    archive=dist/localbell-$version-linux-amd64.tar.gz
+    [[ $(tar -tzf "$archive") == localbell && -x dist/localbell ]] || fail 'Archive must contain only the desktop binary.'
+    [[ $(file -b dist/localbell) == *'ELF 64-bit'*'x86-64'* && $(dist/localbell --version) == "$version" ]] || fail 'Desktop binary architecture or version does not match the release.'
+    mkdir "$work/assets"
+    cp "$apk" "$work/assets/localbell-$version.apk"
+    cp "$archive" "$work/assets/"
+    printf '%s\n' "$commit" > "$work/assets/commit"
+    (cd "$work/assets" && sha256sum -- "localbell-$version.apk" "localbell-$version-linux-amd64.tar.gz" > SHA256SUMS)
+    mv -T -- "$work/assets" "$assets"
+)
+
 [[ $# -le 1 ]] || fail 'Usage: scripts/publish-release.sh [vX.Y.Z]'
 repo=fredjunior54/localbell
 cd "$(git rev-parse --show-toplevel)"
@@ -77,22 +159,34 @@ fi
 assets=$release_dir/$tag
 apk=localbell-$version.apk
 archive=localbell-$version-linux-amd64.tar.gz
-[[ -d $assets ]] || fail "No locally prepared build for $tag."
-for file in commit SHA256SUMS "$apk" "$archive"; do
-    [[ -f $assets/$file && ! -L $assets/$file ]] || fail "Missing or unexpected retained file: $file"
-done
-commit=$(<"$assets/commit")
-[[ $commit =~ ^[0-9a-f]{40}$ && $(git rev-parse --verify "$commit^{commit}") == "$commit" ]] || fail 'Invalid retained commit.'
-[[ $# != 0 || $commit == "$head" ]] || fail 'Prepared artifacts do not belong to the current commit.'
-[[ $(android_version "$commit") == "$version" ]] || fail 'Retained commit has the wrong Android version.'
-checksums=$(cd "$assets" && sha256sum -- "$apk" "$archive")
-[[ $checksums == "$(<"$assets/SHA256SUMS")" ]] || fail 'Retained artifacts do not match their checksums.'
-apk_digest=${checksums%% *}
-archive_digest=${checksums##*$'\n'}
-archive_digest=${archive_digest%% *}
-
 git fetch --no-tags origin refs/heads/main
-git merge-base --is-ancestor "$commit" FETCH_HEAD || fail 'The prepared commit is not on origin/main.'
+if [[ -e $assets || -L $assets ]]; then
+    [[ -d $assets && ! -L $assets ]] || fail 'Unexpected retained build directory.'
+    for file in commit SHA256SUMS "$apk" "$archive"; do
+        [[ -f $assets/$file && ! -L $assets/$file ]] || fail "Missing or unexpected retained file: $file"
+    done
+    commit=$(<"$assets/commit")
+    [[ $commit =~ ^[0-9a-f]{40}$ && $(git rev-parse --verify "$commit^{commit}") == "$commit" ]] || fail 'Invalid retained commit.'
+elif [[ $# == 0 ]]; then
+    commit=$head
+else
+    # Select the commit that introduced this version, not a later commit sharing it.
+    pattern=${version//./[.]}
+    candidates=$(git log --first-parent --format=%H -G "^[[:space:]]*versionName = \"$pattern\"$" FETCH_HEAD -- app/app/build.gradle.kts)
+    commit=''
+    for candidate in $candidates; do
+        if [[ $(android_version "$candidate") == "$version" ]]; then
+            [[ -z $commit ]] || fail 'Multiple commits introduced this version.'
+            commit=$candidate
+        fi
+    done
+    [[ -n $commit ]] || fail "No commit introduced $tag on origin/main."
+fi
+[[ $# != 0 || $commit == "$head" ]] || fail 'Retained artifacts do not belong to the current commit.'
+git merge-base --is-ancestor "$commit" FETCH_HEAD || fail 'The release commit is not on origin/main.'
+[[ $(android_version "$commit") == "$version" ]] || fail 'Release commit has the wrong Android version.'
+server_version=$(git show "$commit:server/Cargo.toml" | sed -nE 's/^version = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p')
+[[ $server_version == "$version" ]] || fail 'Android and Linux versions differ in the release commit.'
 ref=refs/tags/$tag
 remote=$(git ls-remote origin "$ref" "$ref^{}")
 if [[ -n $remote ]]; then
@@ -101,7 +195,19 @@ if [[ -n $remote ]]; then
 fi
 if git show-ref --verify --quiet "$ref"; then
     [[ $(git rev-parse "$ref^{commit}") == "$commit" ]] || fail 'Local tag points to a different commit.'
-elif [[ -z $remote ]]; then
+fi
+if [[ ! -d $assets ]]; then
+    jq -e '(.assets // []) | length == 0' <<< "$release" >/dev/null || fail 'Cannot rebuild an existing draft with uploaded assets; recover the retained build.'
+    printf 'Building signed release artifacts for %s (%s).\n' "$tag" "$commit"
+    build_release
+fi
+checksums=$(cd "$assets" && sha256sum -- "$apk" "$archive")
+[[ $checksums == "$(<"$assets/SHA256SUMS")" ]] || fail 'Retained artifacts do not match their checksums.'
+apk_digest=${checksums%% *}
+archive_digest=${checksums##*$'\n'}
+archive_digest=${archive_digest%% *}
+refresh_dist "$PWD/dist" "$assets" "$release_dir" "$version"
+if [[ -z $remote ]] && ! git show-ref --verify --quiet "$ref"; then
     git tag -a "$tag" "$commit" -m "Release $tag"
 fi
 if [[ -z $remote ]]; then git push origin "$ref:$ref"; fi

@@ -29,9 +29,9 @@ make lint-app        # gradle lint + spotless
 
 End every iteration that changes project files with one patch bump. Do not bump a no-op iteration. Only Fred Junior may authorize a major or minor bump.
 
-Run `scripts/bump-version.sh "fix: Describe the change" -- path/to/file` from `main`, listing only this iteration's files. It synchronizes the version, tests, lints, builds, signs, commits once, and pushes `main`. It does not create tags, publish to GitHub Releases, or install the APK.
+Run `scripts/bump-version.sh "fix: Describe the change" -- path/to/file` from `main`, listing only this iteration's files. It synchronizes the version, tests, lints, commits once, and pushes `main`. It does not generate release artifacts, update `dist/`, create tags, publish to GitHub Releases, or install the APK.
 
-Only Fred Junior decides when to run `scripts/publish-release.sh`. It detects the version at `HEAD` and exits without changing anything if that version is already public. Otherwise it tags the prepared commit and publishes its verified APK and Linux archive without rebuilding. Never move a tag or overwrite a public release. After confirming publication, it attempts to update the configured phone over Wi-Fi ADB; an unavailable phone or failed install does not invalidate the release.
+Only Fred Junior decides when to run `scripts/publish-release.sh`. It detects the version at `HEAD` and exits without changing anything if that version is already public. Otherwise it builds and verifies the signed APK and Linux archive from the same commit on `origin/main`, refreshes `dist/`, tags that commit, and publishes both assets. Retries reuse the same verified artifacts. Never move a tag or overwrite a public release. After confirming publication, it attempts to update the configured phone over Wi-Fi ADB; an unavailable phone or failed install does not invalidate the release.
 
 Keep only the current LocalBell artifacts in `dist/`. Retain previous verified builds under `.git/localbell-releases/` without moving unrelated files.
 

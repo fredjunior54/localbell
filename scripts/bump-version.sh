@@ -5,25 +5,6 @@ set -euo pipefail
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 usage() { fail 'Usage: scripts/bump-version.sh [patch|minor|major] "type: summary" -- path [path ...]'; }
 
-refresh_dist() {
-    local dist=$1 assets=$2 history=$3 version=$4 entry archive
-    local managed='^localbell(-[0-9]+\.[0-9]+\.[0-9]+(\.apk|-linux-amd64\.tar\.gz)|-linux-amd64\.tar\.gz|-migration-test\.apk)?$'
-    [[ ! -L $dist ]] || fail 'Refusing to update a symlinked dist directory.'
-    mkdir -p -- "$dist"
-    local old=()
-    for entry in "$dist"/*; do
-        [[ ${entry##*/} =~ $managed ]] || continue
-        [[ -f $entry && ! -L $entry ]] || fail "Refusing to move unexpected dist entry: $entry"
-        old+=("$entry")
-    done
-    if ((${#old[@]})); then
-        archive=$(mktemp -d "$history/previous-dist.XXXXXXXX")
-        mv -- "${old[@]}" "$archive/"
-        printf 'Previous local outputs moved to: %s\n' "$archive"
-    fi
-    cp -- "$assets/localbell-$version.apk" "$assets/localbell-$version-linux-amd64.tar.gz" "$dist/"
-}
-
 bump='patch'
 case ${1:-} in patch|minor|major) bump=$1; shift ;; esac
 [[ $# -ge 3 && $2 == -- ]] || usage
@@ -58,7 +39,7 @@ fi
 metadata=(app/app/build.gradle.kts packaging/arch/PKGBUILD packaging/arch/.SRCINFO server/Cargo.toml server/Cargo.lock README.md)
 for path in "${metadata[@]}"; do add_path "$path"; done
 
-for tool in make makepkg cargo java keytool file tar flock sha256sum; do
+for tool in make makepkg cargo java flock; do
     command -v "$tool" >/dev/null || fail "Missing tool: $tool"
 done
 remote_head=$(git ls-remote --exit-code origin refs/heads/main)
@@ -85,28 +66,6 @@ if git show-ref --verify --quiet "refs/tags/$tag"; then fail "Local tag already 
 remote_tag=$(git ls-remote --refs origin "refs/tags/$tag")
 [[ -z $remote_tag ]] || fail "Remote tag already exists: $tag"
 
-signing_dir=${ANDROID_SIGNING_DIR:-}
-if [[ -z $signing_dir ]] && command -v fish >/dev/null; then
-    # shellcheck disable=SC2016
-    signing_dir=$(fish -c 'printf "%s" "$ANDROID_SIGNING_DIR"')
-fi
-[[ -n $signing_dir && -d $signing_dir ]] || fail 'Set ANDROID_SIGNING_DIR to the local signing directory.'
-signing_dir=$(cd "$signing_dir" && pwd -P)
-shopt -s nullglob
-keys=("$signing_dir"/*.jks "$signing_dir"/*.keystore "$signing_dir"/*.p12)
-[[ ${#keys[@]} -eq 1 && -f ${keys[0]} && -r ${keys[0]} ]] || fail 'Expected exactly one readable .jks, .keystore, or .p12 file.'
-LOCALBELL_KEYSTORE=${keys[0]}
-if [[ -z ${KEYSTORE_PASSWORD:-} && -r $signing_dir/release-password ]]; then
-    KEYSTORE_PASSWORD=$(<"$signing_dir/release-password")
-fi
-[[ -n ${KEYSTORE_PASSWORD:-} ]] || fail 'Provide KEYSTORE_PASSWORD or the local release-password file.'
-export KEYSTORE_PASSWORD LOCALBELL_KEYSTORE
-if [[ -z ${KEY_ALIAS:-} ]]; then
-    aliases=$(keytool -J-Duser.language=en -J-Duser.country=US -list -keystore "$LOCALBELL_KEYSTORE" -storepass:env KEYSTORE_PASSWORD 2>/dev/null | sed -n 's/^\([^,]*\),.*PrivateKeyEntry.*/\1/p') || fail 'Could not unlock the keystore; check the local signing configuration.'
-    [[ -n $aliases && $aliases != *$'\n'* ]] || fail 'Set KEY_ALIAS to the private key alias.'
-    KEY_ALIAS=$aliases
-fi
-export KEY_ALIAS KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 if [[ -z $sdk ]] && command -v fish >/dev/null; then
     # shellcheck disable=SC2016
@@ -114,12 +73,6 @@ if [[ -z $sdk ]] && command -v fish >/dev/null; then
 fi
 [[ -d $sdk ]] || fail 'Set ANDROID_HOME to the Android SDK.'
 export ANDROID_HOME=$sdk
-apksigners=("$sdk"/build-tools/*/apksigner)
-[[ ${#apksigners[@]} -gt 0 ]] || fail 'Install Android SDK build tools.'
-apksigner=$(printf '%s\n' "${apksigners[@]}" | LC_ALL=C sort -V | tail -n 1)
-aapt=${apksigner%/*}/aapt
-[[ -x $apksigner && -x $aapt ]] || fail 'Android SDK signing or inspection tool is not executable.'
-
 release_dir=$(git rev-parse --absolute-git-dir)/localbell-releases
 mkdir -p "$release_dir"
 exec 9>"$release_dir/lock"
@@ -151,18 +104,7 @@ GIT_INDEX_FILE=$index git checkout-index -a --prefix="$work/tree/"
     grep -q '^Version:.*%{pkg_version}' packaging/rpm/localbell.spec
     grep -Fqx "Version: \${VERSION}" packaging/deb/DEBIAN/control
     env -u LOCALBELL_KEYSTORE -u KEYSTORE_PASSWORD -u KEY_ALIAS -u KEY_PASSWORD make test lint
-    make release-linux VERSION="$version"
-    (cd app && ./gradlew assembleRelease --no-daemon)
-    apk=app/app/build/outputs/apk/release/app-release.apk
-    "$apksigner" verify "$apk"
-    badging=$("$aapt" dump badging "$apk")
-    [[ $badging == *"package: name='io.github.fredjunior54.localbell' versionCode='$((code + 1))' versionName='$version'"* ]] || fail 'APK metadata does not match the release.'
-    archive=dist/localbell-$version-linux-amd64.tar.gz
-    [[ $(tar -tzf "$archive") == localbell && -x dist/localbell ]]
-    [[ $(file -b dist/localbell) == *'ELF 64-bit'*'x86-64'* && $(dist/localbell --version) == "$version" ]]
-    mkdir "$work/assets"
-    cp "$apk" "$work/assets/localbell-$version.apk"
-    cp "$archive" "$work/assets/"
+
 )
 
 [[ $(git rev-parse HEAD) == "$head" && $(git symbolic-ref --short HEAD) == "$branch" ]] || fail 'Checkout changed during the build.'
@@ -178,11 +120,6 @@ expected_tree=$(GIT_INDEX_FILE=$index git write-tree)
 git add -A -- "${paths[@]}"
 git diff --cached --check -- "${paths[@]}"
 git commit --only -m "$subject" -- "${paths[@]}"
-[[ $(git rev-parse 'HEAD^{tree}') == "$expected_tree" ]] || fail 'Committed tree differs from the built tree.'
-git rev-parse HEAD > "$work/assets/commit"
-(cd "$work/assets" && sha256sum -- "localbell-$version.apk" "localbell-$version-linux-amd64.tar.gz" > SHA256SUMS)
-mv "$work/assets" "$release_dir/$tag"
-printf 'Verified release assets: %s/%s\n' "$release_dir" "$tag"
-refresh_dist "$root/dist" "$release_dir/$tag" "$release_dir" "$version"
+[[ $(git rev-parse 'HEAD^{tree}') == "$expected_tree" ]] || fail 'Committed tree differs from the tested tree.'
 git push origin "HEAD:refs/heads/$branch"
-printf 'Prepared %s. To publish manually: ./scripts/publish-release.sh\n' "$tag"
+printf 'Bumped to %s. To publish manually: ./scripts/publish-release.sh\n' "$tag"
