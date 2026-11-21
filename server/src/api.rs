@@ -15,49 +15,63 @@ use std::{
 use tower_http::timeout::TimeoutLayer;
 
 type Response = Result<Json<Value>, StatusCode>;
+#[async_trait::async_trait]
 pub trait Sink: Send {
-    fn send(&mut self, notification: &Notification, previous: Option<u32>) -> anyhow::Result<u32>;
-    fn dismiss(&mut self, id: u32) -> anyhow::Result<()>;
+    async fn send(
+        &mut self,
+        notification: &Notification,
+        previous: Option<u32>,
+    ) -> anyhow::Result<u32>;
+    async fn dismiss(&mut self, id: u32) -> anyhow::Result<()>;
 }
 
 pub struct DesktopSink;
+#[async_trait::async_trait]
 impl Sink for DesktopSink {
-    fn send(&mut self, n: &Notification, previous: Option<u32>) -> anyhow::Result<u32> {
-        use notify_rust::{Notification, Timeout, Urgency};
-        let mut item = Notification::new();
-        item.appname(&n.app_name)
-            .summary(&n.title)
-            .body(&n.message)
-            .icon("dialog-information")
-            .urgency(match n.urgency {
-                0 => Urgency::Low,
-                2 => Urgency::Critical,
-                _ => Urgency::Normal,
-            })
-            .timeout(match n.timeout_ms {
-                0 => Timeout::Never,
-                ms if ms > 0 => Timeout::Milliseconds(ms as u32),
-                _ => Timeout::Default,
-            });
-        if let Some(image) = n.icon_rgba.as_deref().and_then(app_image) {
-            item.icon("").image_data(image);
+    async fn send(&mut self, n: &Notification, previous: Option<u32>) -> anyhow::Result<u32> {
+        use zbus::zvariant::{Structure, Value};
+        let bus = zbus::Connection::session().await?;
+        let proxy = notifications_proxy(&bus).await?;
+        let mut hints = HashMap::from([("urgency", Value::from(n.urgency))]);
+        let mut icon = "dialog-information";
+        if let Some(pixels) = n.icon_rgba.as_deref().and_then(app_image) {
+            let image = Structure::from((48_i32, 48_i32, 192_i32, true, 8_i32, 4_i32, pixels));
+            hints.insert("image-data", Value::from(image));
+            icon = "";
         }
-        if let Some(id) = previous {
-            item.id(id);
-        }
-        Ok(item.show()?.id())
+        let actions: Vec<&str> = Vec::new();
+        Ok(proxy
+            .call(
+                "Notify",
+                &(
+                    n.app_name.as_str(),
+                    previous.unwrap_or_default(),
+                    icon,
+                    n.title.as_str(),
+                    n.message.as_str(),
+                    actions,
+                    hints,
+                    n.timeout_ms.max(-1),
+                ),
+            )
+            .await?)
     }
-    fn dismiss(&mut self, id: u32) -> anyhow::Result<()> {
-        let bus = zbus::blocking::Connection::session()?;
-        let proxy = zbus::blocking::Proxy::new(
-            &bus,
-            "org.freedesktop.Notifications",
-            "/org/freedesktop/Notifications",
-            "org.freedesktop.Notifications",
-        )?;
-        proxy.call::<_, _, ()>("CloseNotification", &(id,))?;
+    async fn dismiss(&mut self, id: u32) -> anyhow::Result<()> {
+        let bus = zbus::Connection::session().await?;
+        let proxy = notifications_proxy(&bus).await?;
+        proxy.call::<_, _, ()>("CloseNotification", &(id,)).await?;
         Ok(())
     }
+}
+
+async fn notifications_proxy(bus: &zbus::Connection) -> zbus::Result<zbus::Proxy<'_>> {
+    zbus::Proxy::new(
+        bus,
+        "org.freedesktop.Notifications",
+        "/org/freedesktop/Notifications",
+        "org.freedesktop.Notifications",
+    )
+    .await
 }
 
 #[derive(Deserialize)]
@@ -78,9 +92,8 @@ pub struct Notification {
     timeout_ms: i32,
     icon_rgba: Option<String>,
 }
-fn app_image(encoded: &str) -> Option<notify_rust::Image> {
+fn app_image(encoded: &str) -> Option<Vec<u8>> {
     use base64::{Engine, engine::general_purpose::STANDARD};
-    const SIDE: i32 = 48;
     const BYTES: usize = 48 * 48 * 4;
     if encoded.len() != BYTES / 3 * 4 {
         return None;
@@ -89,7 +102,7 @@ fn app_image(encoded: &str) -> Option<notify_rust::Image> {
     if pixels.len() != BYTES {
         return None;
     }
-    notify_rust::Image::from_rgba(SIDE, SIDE, pixels).ok()
+    Some(pixels)
 }
 
 #[derive(Deserialize)]
@@ -104,7 +117,7 @@ struct Delivery {
 struct Context {
     fingerprint: String,
     state: Arc<Mutex<State>>,
-    delivery: Arc<Mutex<Delivery>>,
+    delivery: Arc<tokio::sync::Mutex<Delivery>>,
 }
 
 pub fn router(state: Arc<Mutex<State>>, sink: impl Sink + 'static, fingerprint: String) -> Router {
@@ -121,7 +134,7 @@ pub fn router(state: Arc<Mutex<State>>, sink: impl Sink + 'static, fingerprint: 
         .with_state(Context {
             fingerprint,
             state,
-            delivery: Arc::new(Mutex::new(Delivery {
+            delivery: Arc::new(tokio::sync::Mutex::new(Delivery {
                 active: HashMap::new(),
                 sink: Box::new(sink),
             })),
@@ -266,19 +279,18 @@ async fn send(
     if req.key.is_empty() || req.key.len() > 1024 || req.urgency > 2 {
         return Err(StatusCode::BAD_REQUEST);
     }
-    tokio::task::spawn_blocking(move || {
-        let mut delivery = ctx.delivery.lock().map_err(error)?;
-        let key = (id, req.key.clone());
-        if delivery.active.len() >= 4096 && !delivery.active.contains_key(&key) {
-            delivery.active.clear();
-        }
-        let previous = delivery.active.get(&key).copied();
-        let id = delivery.sink.send(&req, previous).map_err(error)?;
-        delivery.active.insert(key, id);
-        Ok(Json(json!({"status": "sent"})))
-    })
-    .await
-    .map_err(error)?
+    let mut delivery = ctx.delivery.lock().await;
+    let key = (id, req.key.clone());
+    let previous = delivery.active.get(&key).copied();
+    let id = tokio::time::timeout(Duration::from_secs(3), delivery.sink.send(&req, previous))
+        .await
+        .map_err(|_| StatusCode::GATEWAY_TIMEOUT)?
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    if delivery.active.len() >= 4096 && previous.is_none() {
+        delivery.active.clear();
+    }
+    delivery.active.insert(key, id);
+    Ok(Json(json!({"status": "sent"})))
 }
 
 async fn dismiss(
@@ -290,15 +302,16 @@ async fn dismiss(
     if req.key.is_empty() || req.key.len() > 1024 {
         return Err(StatusCode::BAD_REQUEST);
     }
-    tokio::task::spawn_blocking(move || {
-        let mut delivery = ctx.delivery.lock().map_err(error)?;
-        if let Some(id) = delivery.active.remove(&(id, req.key)) {
-            delivery.sink.dismiss(id).map_err(error)?;
-        }
-        Ok(Json(json!({"status": "dismissed"})))
-    })
-    .await
-    .map_err(error)?
+    let mut delivery = ctx.delivery.lock().await;
+    let key = (id, req.key);
+    if let Some(&id) = delivery.active.get(&key) {
+        tokio::time::timeout(Duration::from_secs(3), delivery.sink.dismiss(id))
+            .await
+            .map_err(|_| StatusCode::GATEWAY_TIMEOUT)?
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        delivery.active.remove(&key);
+    }
+    Ok(Json(json!({"status": "dismissed"})))
 }
 
 async fn health(Extract(ctx): Extract<Context>, headers: HeaderMap) -> Response {
@@ -322,14 +335,89 @@ mod tests {
         assert!(app_image(&(valid + "AAAA")).is_none());
     }
 
+    struct TestNotifications;
+
+    #[zbus::interface(name = "org.freedesktop.Notifications")]
+    impl TestNotifications {
+        #[allow(clippy::too_many_arguments)] // Standard D-Bus Notify signature.
+        fn notify(
+            &self,
+            app: &str,
+            previous: u32,
+            icon: &str,
+            title: &str,
+            body: &str,
+            actions: Vec<String>,
+            hints: std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
+            timeout: i32,
+        ) -> zbus::fdo::Result<u32> {
+            let _ = (app, title, body, actions, timeout);
+            if (previous == 42) != hints.contains_key("image-data")
+                || (icon.is_empty() != (previous == 42))
+            {
+                return Err(zbus::fdo::Error::Failed(
+                    "Unexpected image or replacement data".into(),
+                ));
+            }
+            Ok(42)
+        }
+
+        fn close_notification(&self, id: u32) -> zbus::fdo::Result<()> {
+            if id == 42 {
+                Ok(())
+            } else {
+                Err(zbus::fdo::Error::Failed("Unexpected ID".into()))
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn desktop_delivery_recovers_on_a_private_bus() -> anyhow::Result<()> {
+        if std::env::var_os("LOCALBELL_PRIVATE_DBUS_TEST").is_none() {
+            // The fixture is started only by the explicit private-bus command.
+            return Ok(());
+        }
+        anyhow::ensure!(
+            std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some(),
+            "Private D-Bus address is required"
+        );
+        let mut notification = Notification {
+            key: "fixture".into(),
+            app_name: "LocalBell".into(),
+            title: "Test".into(),
+            message: "Fixture only".into(),
+            urgency: 1,
+            timeout_ms: 500,
+            icon_rgba: None,
+        };
+        let mut sink = DesktopSink;
+        tokio::time::timeout(Duration::from_secs(3), async {
+            assert!(sink.send(&notification, None).await.is_err());
+            let _bus = zbus::connection::Builder::session()?
+                .name("org.freedesktop.Notifications")?
+                .serve_at("/org/freedesktop/Notifications", TestNotifications)?
+                .build()
+                .await?;
+            assert_eq!(sink.send(&notification, None).await?, 42);
+            use base64::{Engine, engine::general_purpose::STANDARD};
+            notification.icon_rgba = Some(STANDARD.encode(vec![255; 48 * 48 * 4]));
+            assert_eq!(sink.send(&notification, Some(42)).await?, 42);
+            sink.dismiss(42).await?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+        Ok(())
+    }
+
     #[derive(Default)]
     struct Fake(Vec<Option<u32>>);
+    #[async_trait::async_trait]
     impl Sink for Fake {
-        fn send(&mut self, _: &Notification, previous: Option<u32>) -> anyhow::Result<u32> {
+        async fn send(&mut self, _: &Notification, previous: Option<u32>) -> anyhow::Result<u32> {
             self.0.push(previous);
             Ok(previous.unwrap_or(self.0.len() as u32))
         }
-        fn dismiss(&mut self, id: u32) -> anyhow::Result<()> {
+        async fn dismiss(&mut self, id: u32) -> anyhow::Result<()> {
             assert_eq!(id, 1);
             Ok(())
         }

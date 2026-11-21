@@ -31,7 +31,7 @@ One request can be active for at most two minutes. The receiver allows five new 
 
 Android treats the current pairing as ready only after pinned, authenticated health returns HTTP 200 with the JSON string `status: ready`. The app pauses forwarding when it next detects an unhealthy receiver and retains the forwarding preference across reconnects.
 
-All delivery requests require `Authorization: Bearer TOKEN`; invalid credentials return `401`. JSON bodies are limited to 32 KiB. Notification keys are scoped to the paired device. Urgency is 0–2; `timeout_ms` is `-1` for the desktop default, `0` for no timeout, or a positive number. Removal revokes the token across restarts. Identity and token digests remain under `$XDG_CONFIG_HOME/localbell/` (normally `~/.config/localbell/`).
+All delivery requests require `Authorization: Bearer TOKEN`; invalid credentials return `401`. JSON bodies are limited to 32 KiB. Notification keys are scoped to the paired device. Urgency is 0–2; `timeout_ms` is `-1` for the desktop default, `0` for no timeout, or a positive number. Delivery and dismissal return `503` if the desktop notification service rejects the operation or is unavailable, or `504` if the D-Bus call times out. The receiver acknowledges a new notification only after D-Bus accepts it. Removal revokes the token across restarts. Identity and token digests remain under `$XDG_CONFIG_HOME/localbell/` (normally `~/.config/localbell/`).
 
 LAN mDNS advertises the `_localbell-v1._tcp.local.` service with fingerprint TXT key `fp`. This is only a hint for rediscovery: the app still verifies the saved TLS pin. Explicit overlay addresses and hostnames use their configured endpoint without mDNS fallback. The override does not advertise the overlay address via LAN mDNS.
 

@@ -45,7 +45,7 @@ Keep only the current LocalBell artifacts in `dist/`. Retain previous verified b
 - Embed CaskaydiaCove Nerd Font for text and Symbols Nerd Font for all control icons. Use 14 egui points for body, fields, and button text, and 16 for section and dialog titles. The LocalBell wordmark may use a larger size. Keep action labels visible next to their icons.
 - Use shared named gaps, surface insets, and padded action styles. Group related content on surfaces instead of stacking separators. Review main and modal layouts at normal and narrow widths, including empty and paired states.
 - Run `cargo fmt` and Clippy before finishing Rust changes.
-- Use injectable notification sinks in tests; do not send notifications to the live desktop.
+- Keep desktop delivery asynchronous and bounded. Use injectable notification sinks or an isolated session bus in tests; do not send notifications to the live desktop. To exercise the D-Bus fixture, run `dbus-run-session -- env LOCALBELL_PRIVATE_DBUS_TEST=1 cargo test --manifest-path server/Cargo.toml desktop_delivery_recovers_on_a_private_bus`.
 - Keep identity and paired-device configuration in the LocalBell XDG config directory. Do not log notification bodies, pairing secrets, comparison numbers, or tokens.
 
 ## CI / CD

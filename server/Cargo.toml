@@ -1,10 +1,11 @@
 [package]
 name = "localbell"
-version = "1.4.10"
+version = "1.4.11"
 edition = "2024"
 
 [dependencies]
 anyhow = "1"
+async-trait = "0.1"
 base64 = "0.23"
 axum = "0.8"
 axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
@@ -14,7 +15,6 @@ hex = "0.4"
 if-addrs = "0.15"
 ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
 mdns-sd = "0.20"
-notify-rust = { version = "4", features = ["images_no_default_features"] }
 rcgen = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"] }
