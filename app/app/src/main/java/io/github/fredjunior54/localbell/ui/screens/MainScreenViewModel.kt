@@ -1,5 +1,6 @@
 package io.github.fredjunior54.localbell.ui.screens
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,7 @@ import io.github.fredjunior54.localbell.network.ApiClient
 import io.github.fredjunior54.localbell.network.HealthMonitor
 import io.github.fredjunior54.localbell.network.NotificationRequest
 import io.github.fredjunior54.localbell.network.PairingClient
+import io.github.fredjunior54.localbell.service.withAppArtwork
 import io.github.fredjunior54.localbell.util.LanEndpoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -186,8 +188,9 @@ class MainScreenViewModel(
     private val _testNotification = MutableStateFlow(TestNotificationUi())
     internal val testNotification = _testNotification.asStateFlow()
 
-    fun sendTestNotification(title: String, message: String) {
+    fun sendTestNotification(context: Context, title: String, message: String) {
         if (_testNotification.value.sending) return
+        val appContext = context.applicationContext
         _testNotification.value = TestNotificationUi(sending = true)
         viewModelScope.launch {
             val sent =
@@ -200,12 +203,13 @@ class MainScreenViewModel(
                             val api = ApiClient.getApi(url, pairing.token, pairing.fingerprint)
                             api.sendNotification(
                                     NotificationRequest(
-                                        key = "localbell-test:${java.util.UUID.randomUUID()}",
-                                        app_name = "LocalBell",
-                                        package_name = "io.github.fredjunior54.localbell",
-                                        title = title,
-                                        message = message,
-                                    ),
+                                            key = "localbell-test:${java.util.UUID.randomUUID()}",
+                                            app_name = "LocalBell",
+                                            package_name = appContext.packageName,
+                                            title = title,
+                                            message = message,
+                                        )
+                                        .withAppArtwork(appContext),
                                 )
                                 .isSuccessful
                         }

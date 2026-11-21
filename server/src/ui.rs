@@ -71,6 +71,16 @@ fn action(
     )
 }
 
+fn device_row<R>(
+    ui: &mut egui::Ui,
+    content: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = ACTION_HEIGHT;
+        ui.horizontal_wrapped(content).inner
+    })
+}
+
 fn surface(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
     egui::Frame::new()
         .fill(MANTLE)
@@ -327,7 +337,7 @@ impl App {
                 ui.label("No devices paired.");
             }
             for device in &state.devices {
-                ui.horizontal_wrapped(|ui| {
+                device_row(ui, |ui| {
                     ui.label(&device.name);
                     if action(ui, TRASH_ICON, "Remove", RED, true).clicked() {
                         remove = Some(device.id.clone());
@@ -510,4 +520,18 @@ fn comparison_vector_preserves_leading_zero_and_binds_leaf() {
         crate::state::comparison(&"3".repeat(64), &code, &nonce, challenge),
         "011659"
     );
+}
+
+#[test]
+fn device_name_and_remove_share_a_vertical_center() {
+    egui::__run_test_ui(|ui| {
+        let (name, button) = device_row(ui, |ui| {
+            (
+                ui.label("Android phone"),
+                ui.add(egui::Button::new("Remove").min_size(egui::vec2(0.0, ACTION_HEIGHT))),
+            )
+        })
+        .inner;
+        assert!((name.rect.center().y - button.rect.center().y).abs() <= 0.5);
+    });
 }

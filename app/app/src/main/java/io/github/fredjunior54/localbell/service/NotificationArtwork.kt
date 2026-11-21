@@ -19,14 +19,25 @@ internal fun NotificationRequest.withArtwork(
     notification: StatusBarNotification,
 ): NotificationRequest {
     val artwork =
-        runCatching { context.packageManager.getApplicationIcon(notification.packageName).toRgba() }
-            .getOrNull()
+        appArtwork(context, notification.packageName)
             ?: runCatching {
                 val source = context.createPackageContext(notification.packageName, 0)
                 notification.notification.smallIcon?.loadDrawable(source)?.toRgba()
             }
                 .getOrNull()
-            ?: return this
+    return withEncodedArtwork(artwork)
+}
+
+internal fun NotificationRequest.withAppArtwork(context: Context): NotificationRequest =
+    withEncodedArtwork(appArtwork(context, package_name))
+
+private fun appArtwork(context: Context, packageName: String): String? = runCatching {
+    context.packageManager.getApplicationIcon(packageName).toRgba()
+}
+    .getOrNull()
+
+private fun NotificationRequest.withEncodedArtwork(artwork: String?): NotificationRequest {
+    if (artwork == null) return this
     val decorated = copy(icon_rgba = artwork)
     return if (gson.toJson(decorated).toByteArray(Charsets.UTF_8).size <= MAX_REQUEST_BYTES)
         decorated

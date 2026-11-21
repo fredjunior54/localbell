@@ -253,7 +253,7 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
                 test,
                 isConfigured && connectionState == HealthMonitor.ConnectionState.CONNECTED,
             ) {
-                viewModel.sendTestNotification(title, message)
+                viewModel.sendTestNotification(context.applicationContext, title, message)
             }
         },
         onFilterClick = { showBlacklist = true },
