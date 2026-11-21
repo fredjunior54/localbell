@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.3</strong></p>
+<p align="center"><strong>Version 1.4.4</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -34,9 +34,10 @@ For an optional Tailscale connection, see the [setup guide](docs/getting-started
 
 ## ✨ Features
 
-- **No cloud relay:** Notifications travel directly from your phone to your desktop.
-- **Automatic discovery:** The app discovers the server over mDNS.
-- **Desktop integration:** Notifications appear through your desktop's D-Bus notification service.
+- **Pair by address:** Enter the receiver’s IP or hostname, compare a six-digit number, and approve. No QR scan or code entry.
+- **Encrypted, direct delivery:** Notifications travel over certificate-pinned HTTPS on your LAN or Tailscale network. No account or cloud relay.
+- **Native Linux notifications:** Get alerts through your desktop’s D-Bus notification service. Dismissing an alert on your phone also dismisses it on Linux.
+- **Per-app filters:** Choose which Android apps can forward notifications.
 
 ## 🚀 Quick start
 
