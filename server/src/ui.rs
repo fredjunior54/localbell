@@ -403,9 +403,9 @@ fn detail_icon(ui: &mut egui::Ui, glyph: char, color: Color32) {
     );
 }
 
-pub fn run(phone: Arc<Controller>) -> Result<()> {
+pub fn run(phone: Arc<Controller>, start_minimized: bool) -> Result<()> {
     let window = Arc::new(Window::default());
-    window.visible.store(true, Ordering::Relaxed);
+    window.visible.store(!start_minimized, Ordering::Relaxed);
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/localbell-icon.png"))?;
     let tray_icon = ksni::Icon {
         width: icon.width as i32,
@@ -418,27 +418,35 @@ pub fn run(phone: Arc<Controller>) -> Result<()> {
             .flat_map(|p| [p[3], p[0], p[1], p[2]])
             .collect(),
     };
-    let tray = (Tray {
+    let tray = match (Tray {
         window: Arc::clone(&window),
         icon: tray_icon,
     })
     .spawn()
-    .ok();
-    loop {
-        open_window(Arc::clone(&window), icon.clone(), Arc::clone(&phone))?;
-        if let Some(tray) = &tray {
+    {
+        Ok(tray) => Some(tray),
+        Err(error) => {
+            if start_minimized {
+                tracing::warn!(%error, "System tray unavailable; opening the main window instead");
+            }
+            window.visible.store(true, Ordering::Relaxed);
+            None
+        }
+    };
+    while !window.quit.load(Ordering::Relaxed) {
+        if window.visible.load(Ordering::Relaxed) {
+            open_window(Arc::clone(&window), icon.clone(), Arc::clone(&phone))?;
+            let Some(tray) = &tray else {
+                break;
+            };
             tray.update(|_| ());
-        } else {
-            break;
         }
         while !window.visible.load(Ordering::Relaxed) && !window.quit.load(Ordering::Relaxed) {
             if phone.status.lock().unwrap().approval.is_some() {
                 window.visible.store(true, Ordering::Relaxed);
+                break;
             }
             std::thread::sleep(Duration::from_millis(100));
-        }
-        if window.quit.load(Ordering::Relaxed) {
-            break;
         }
         if let Some(tray) = &tray {
             tray.update(|_| ());

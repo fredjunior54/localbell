@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.23</strong></p>
+<p align="center"><strong>Version 1.4.24</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -53,6 +53,8 @@ tar -xzf localbell-X.Y.Z-linux-amd64.tar.gz
 ```
 
 Run `./localbell --help` to list the CLI options or `./localbell --version` to print the installed version. Neither command opens a window.
+
+Use `./localbell --start-minimized` to start in the system tray without opening the main window. If the tray is unavailable, LocalBell opens the window instead.
 
 Configure the phone address and port in the desktop window. Click the tray icon to show or hide the window. Closing the window keeps the session active when a tray host is available; **Quit** stops LocalBell. GNOME may require the AppIndicator and KStatusNotifierItem Support extension.
 

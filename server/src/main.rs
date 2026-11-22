@@ -6,7 +6,7 @@ mod ui;
 use anyhow::{Context, Result};
 use std::{fs, os::unix::fs::DirBuilderExt, path::PathBuf, sync::Arc, time::Duration};
 
-const HELP: &str = "Receive Android notifications on your Linux desktop.\n\nUsage: localbell [OPTIONS]\n\nConfigure the phone address and port in the desktop window.\n\n  -h, --help       Show help\n  -V, --version    Show version\n      --font-licenses  Show bundled font licenses\n";
+const HELP: &str = "Receive Android notifications on your Linux desktop.\n\nUsage: localbell [OPTIONS]\n\nConfigure the phone address and port in the desktop window.\n\n  -h, --help       Show help\n  -V, --version    Show version\n      --font-licenses    Show bundled font licenses\n      --start-minimized  Start in the system tray\n";
 
 fn main() -> Result<()> {
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
@@ -14,8 +14,9 @@ fn main() -> Result<()> {
         print!("{HELP}");
         return Ok(());
     }
-    match args.as_slice() {
-        [] => (),
+    let start_minimized = match args.as_slice() {
+        [] => false,
+        [arg] if arg == "--start-minimized" => true,
         [arg] if arg == "--version" || arg == "-V" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             return Ok(());
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         _ => anyhow::bail!("Unknown option. See localbell --help."),
-    }
+    };
     use std::io::IsTerminal;
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("localbell=info"));
@@ -65,7 +66,7 @@ fn main() -> Result<()> {
         &runtime,
         dir.join("phone-v1.json"),
     )?);
-    let result = ui::run(phone);
+    let result = ui::run(phone, start_minimized);
     runtime.shutdown_timeout(Duration::from_secs(2));
     result
 }
