@@ -351,9 +351,9 @@ mod tests {
             hints: std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
             timeout: i32,
         ) -> zbus::fdo::Result<u32> {
-            let _ = (app, title, body, actions, timeout);
-            if (previous == 42) != hints.contains_key("image-data")
-                || (icon.is_empty() != (previous == 42))
+            let _ = (app, body, actions, timeout);
+            let expects_image = previous == 42 || title == "LocalBell test notification";
+            if expects_image != hints.contains_key("image-data") || icon.is_empty() != expects_image
             {
                 return Err(zbus::fdo::Error::Failed(
                     "Unexpected image or replacement data".into(),
@@ -416,6 +416,67 @@ mod tests {
             Ok::<(), anyhow::Error>(())
         })
         .await??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn emulator_reverse_session_delivers_test_notification() -> anyhow::Result<()> {
+        use localbell::{
+            session_client::{self, Event},
+            session_tls,
+        };
+        let Some(port) = std::env::var("LOCALBELL_EMULATOR_PORT").ok() else {
+            return Ok(());
+        };
+        anyhow::ensure!(
+            std::env::var_os("LOCALBELL_PRIVATE_DBUS_TEST").is_some(),
+            "Run on an isolated D-Bus session"
+        );
+        let address = std::net::SocketAddrV4::new(std::net::Ipv4Addr::LOCALHOST, port.parse()?);
+        let _bus = zbus::connection::Builder::session()?
+            .name("org.freedesktop.Notifications")?
+            .serve_at("/org/freedesktop/Notifications", TestNotifications)?
+            .build()
+            .await?;
+        tokio::time::timeout(Duration::from_secs(50), async {
+            let (mut socket, leaf) = loop {
+                match session_tls::enroll(address).await {
+                    Ok(connection) => break connection,
+                    Err(_) => tokio::time::sleep(Duration::from_millis(250)).await,
+                }
+            };
+            let mut saved = None;
+            session_client::pair(&mut socket, leaf, |number| std::future::ready(number.len() == 6), |credential| {
+                saved = Some(credential.clone());
+                Ok(())
+            }).await?;
+            drop(socket);
+            let saved = saved.ok_or_else(|| anyhow::anyhow!("Fixture did not save a credential"))?;
+            let mut socket = session_tls::connect(address, saved.leaf).await?;
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let mut tx = Some(tx);
+            let mut delivered = HashMap::new();
+            let session = session_client::forward(&mut socket, &saved, true, |event| {
+                let response = tx.take();
+                let mut active = std::mem::take(&mut delivered);
+                async move {
+                    let expected = matches!(&event, Event::Notification(value) if value["title"] == "LocalBell test notification" && value["icon_rgba"].is_string());
+                    let accepted = expected && crate::phone::deliver(&mut active, event).await.unwrap_or(false);
+                    if let Some(response) = response { let _ = response.send(accepted); }
+                    accepted
+                }
+            });
+            // The Android UI verifies the acknowledged result before closing the session.
+            let (result, accepted) = tokio::join!(session, rx);
+            if let Err(error) = result {
+                // Stopping the foreground service may close the connection without close_notify.
+                if !error.downcast_ref::<std::io::Error>().is_some_and(|io| io.kind() == std::io::ErrorKind::UnexpectedEof) {
+                    return Err(error);
+                }
+            }
+            anyhow::ensure!(accepted?, "The isolated daemon did not receive test artwork");
+            Ok::<(), anyhow::Error>(())
+        }).await??;
         Ok(())
     }
 

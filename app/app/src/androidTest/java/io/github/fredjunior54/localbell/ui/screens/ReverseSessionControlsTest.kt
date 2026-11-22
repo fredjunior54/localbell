@@ -3,14 +3,17 @@ package io.github.fredjunior54.localbell.ui.screens
 import android.content.Intent
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.fredjunior54.localbell.MainActivity
 import io.github.fredjunior54.localbell.service.PhoneSessionService
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,6 +41,41 @@ class ReverseSessionControlsTest {
             } finally {
                 context.stopService(Intent(context, PhoneSessionService::class.java))
             }
+        }
+    }
+
+    @Test
+    fun pairsWithRustAndDeliversATestNotification() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("reverseInterop") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assumeTrue(
+            android.os.Build.FINGERPRINT.contains("generic") ||
+                android.os.Build.HARDWARE.contains("ranchu"),
+        )
+        check(!context.noBackupFilesDir.resolve("desktop-v1.digest").exists()) {
+            "Use a fresh isolated emulator without a saved LocalBell pairing"
+        }
+        val launch =
+            Intent(context, MainActivity::class.java)
+                .putExtra("io.github.fredjunior54.localbell.REVERSE_PREVIEW", true)
+        ActivityScenario.launch<MainActivity>(launch).use {
+            try {
+                awaitText("Numbers match")
+                compose.onNodeWithText("Numbers match").performClick()
+                awaitText("Connected • Ready to forward")
+                compose.onNodeWithText("Send Test Notification").performScrollTo().performClick()
+                awaitText("Test notification delivered.")
+                compose.onNodeWithText("Forwarded this session: 0").assertExists()
+            } finally {
+                PhoneSessionService.active?.unpair()
+                context.stopService(Intent(context, PhoneSessionService::class.java))
+            }
+        }
+    }
+
+    private fun awaitText(value: String) {
+        compose.waitUntil(timeoutMillis = 20_000) {
+            compose.onAllNodes(hasText(value)).fetchSemanticsNodes().isNotEmpty()
         }
     }
 }
