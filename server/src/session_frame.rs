@@ -1,6 +1,9 @@
 //! Length-delimited payloads for the reverse TLS session.
 
-use std::io::{self, ErrorKind};
+use std::{
+    io::{self, ErrorKind},
+    time::Duration,
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub const MAX_PAYLOAD: usize = 32 * 1024;
@@ -11,6 +14,16 @@ pub async fn read(reader: &mut (impl AsyncRead + Unpin)) -> io::Result<Option<Ve
     if reader.read(&mut header[..1]).await? == 0 {
         return Ok(None);
     }
+    // An idle session can wait indefinitely, but a started frame cannot.
+    tokio::time::timeout(Duration::from_secs(5), read_body(reader, header))
+        .await
+        .map_err(|_| io::Error::new(ErrorKind::TimedOut, "Frame read timed out"))?
+}
+
+async fn read_body(
+    reader: &mut (impl AsyncRead + Unpin),
+    mut header: [u8; 4],
+) -> io::Result<Option<Vec<u8>>> {
     reader.read_exact(&mut header[1..]).await?;
     let len = u32::from_be_bytes(header) as usize;
     if !(1..=MAX_PAYLOAD).contains(&len) {

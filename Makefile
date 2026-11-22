@@ -41,7 +41,7 @@ format-app: ## Format Kotlin code
 	cd $(APP_DIR) && ./gradlew spotlessApply
 
 up: ## Start the desktop app
-	cargo run --locked --manifest-path $(SERVER_DIR)/Cargo.toml
+	RUST_LOG="$${RUST_LOG:-localbell=debug}" cargo run --locked --manifest-path $(SERVER_DIR)/Cargo.toml
 
 rpm: build ## Build RPM package
 	mkdir -p ~/rpmbuild/SOURCES ~/rpmbuild/SPECS ~/rpmbuild/BUILD ~/rpmbuild/RPMS ~/rpmbuild/SRPMS

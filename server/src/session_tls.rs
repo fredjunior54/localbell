@@ -102,6 +102,12 @@ async fn dial(
     let connection = tokio::time::timeout(Duration::from_secs(5), async {
         let tcp = TcpStream::connect(address).await?;
         tcp.set_nodelay(true)?;
+        socket2::SockRef::from(&tcp).set_tcp_keepalive(
+            &socket2::TcpKeepalive::new()
+                .with_time(Duration::from_secs(60))
+                .with_interval(Duration::from_secs(20))
+                .with_retries(3),
+        )?;
         TlsConnector::from(Arc::new(config))
             .connect(ServerName::IpAddress((*address.ip()).into()), tcp)
             .await

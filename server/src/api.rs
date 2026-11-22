@@ -64,7 +64,7 @@ impl Sink for DesktopSink {
     }
 }
 
-async fn notifications_proxy(bus: &zbus::Connection) -> zbus::Result<zbus::Proxy<'_>> {
+pub(crate) async fn notifications_proxy(bus: &zbus::Connection) -> zbus::Result<zbus::Proxy<'_>> {
     zbus::Proxy::new(
         bus,
         "org.freedesktop.Notifications",
@@ -84,11 +84,11 @@ struct Pair {
 }
 #[derive(Deserialize)]
 pub struct Notification {
-    key: String,
+    pub(crate) key: String,
     app_name: String,
     title: String,
     message: String,
-    urgency: u8,
+    pub(crate) urgency: u8,
     timeout_ms: i32,
     icon_rgba: Option<String>,
 }
@@ -403,6 +403,16 @@ mod tests {
             notification.icon_rgba = Some(STANDARD.encode(vec![255; 48 * 48 * 4]));
             assert_eq!(sink.send(&notification, Some(42)).await?, 42);
             sink.dismiss(42).await?;
+            use localbell::session_client::Event;
+            let mut delivered = HashMap::new();
+            let payload = json!({"key":"session-fixture", "app_name":"LocalBell", "title":"Test",
+                "message":"Fixture only", "urgency":1, "timeout_ms":500});
+            assert!(crate::phone::deliver(&mut delivered, Event::Notification(payload)).await?);
+            assert!(
+                crate::phone::deliver(&mut delivered, Event::Dismiss("session-fixture".into()))
+                    .await?
+            );
+            assert!(delivered.is_empty());
             Ok::<(), anyhow::Error>(())
         })
         .await??;

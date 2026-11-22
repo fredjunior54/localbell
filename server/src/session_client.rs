@@ -145,6 +145,21 @@ pub async fn forward<S, Deliver, Delivery>(
     stream: &mut S,
     credential: &Credential,
     ready: bool,
+    deliver: Deliver,
+) -> Result<Disconnect>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+    Deliver: FnMut(Event) -> Delivery,
+    Delivery: Future<Output = bool>,
+{
+    forward_with_status(stream, credential, ready, || (), deliver).await
+}
+
+pub async fn forward_with_status<S, Deliver, Delivery>(
+    stream: &mut S,
+    credential: &Credential,
+    ready: bool,
+    authenticated: impl FnOnce(),
     mut deliver: Deliver,
 ) -> Result<Disconnect>
 where
@@ -165,6 +180,7 @@ where
         _ => anyhow::bail!("Unexpected authentication response"),
     }
     send(stream, DesktopMessage::Readiness { ready }).await?;
+    authenticated();
     let mut previous = 0;
     while let Some(message) = receive(stream, Duration::MAX).await? {
         let (id, event) = match message {

@@ -173,6 +173,10 @@ struct App {
     error: String,
     configure: ListenUpdates,
     listen_form: Option<ListenForm>,
+    phone: Option<Arc<crate::phone::Controller>>,
+    phone_host: String,
+    phone_port: String,
+    phone_error: String,
 }
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
@@ -257,14 +261,68 @@ impl App {
         self.listen_form = Some(form);
     }
 
-    fn content(&mut self, ui: &mut egui::Ui) {
-        let Ok(status) = self.status.lock() else {
+    fn phone_controls(&mut self, ui: &mut egui::Ui) {
+        let Some(phone) = &self.phone else {
             return;
         };
-        let Ok(mut state) = self.state.lock() else {
+        let (message, busy, saved) = {
+            let status = phone.status.lock().unwrap();
+            (status.message, status.busy, status.saved)
+        };
+        surface(ui, |ui| {
+            section(ui, SERVER_ICON, "Phone Configuration");
+            ui.label(message);
+            if !saved {
+                ui.label("Phone address");
+                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.phone_host));
+                ui.label("Port");
+                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.phone_port));
+                if action(ui, SETTINGS_ICON, "Pair", MAUVE, !busy).clicked() {
+                    let result = self
+                        .phone_port
+                        .trim()
+                        .parse()
+                        .map_err(|_| anyhow::anyhow!("Enter a valid port."))
+                        .and_then(|port| phone.pair(&self.phone_host, port));
+                    self.phone_error = result
+                        .err()
+                        .map_or_else(String::new, |error| error.to_string());
+                }
+            } else if action(ui, SETTINGS_ICON, "Remove Pairing", RED, true).clicked() {
+                self.phone_error = phone
+                    .forget()
+                    .err()
+                    .map_or_else(String::new, |error| error.to_string());
+            }
+            let mut status = phone.status.lock().unwrap();
+            if let Some((number, _)) = &status.comparison {
+                ui.label(format!("Compare this number with the phone: {number}"));
+                let accept = action(ui, SETTINGS_ICON, "Numbers Match", MAUVE, true).clicked();
+                let decline = action(ui, SETTINGS_ICON, "Cancel", RED, true).clicked();
+                if (accept || decline)
+                    && let Some((_, response)) = status.comparison.take()
+                {
+                    let _ = response.send(accept);
+                }
+            }
+            if !self.phone_error.is_empty() {
+                ui.colored_label(RED, &self.phone_error);
+            }
+        });
+    }
+
+    fn content(&mut self, ui: &mut egui::Ui) {
+        let status_arc = Arc::clone(&self.status);
+        let state_arc = Arc::clone(&self.state);
+        let Ok(status) = status_arc.lock() else {
+            return;
+        };
+        let Ok(mut state) = state_arc.lock() else {
             return;
         };
         ui.heading(egui::RichText::new("LocalBell").size(36.0).color(MAUVE));
+        ui.add_space(SECTION_GAP);
+        self.phone_controls(ui);
         ui.add_space(SECTION_GAP);
         surface(ui, |ui| {
             section(ui, SERVER_ICON, "Receiver");
@@ -357,7 +415,12 @@ impl App {
     }
 }
 
-pub fn run(state: Shared, status: Arc<Mutex<Network>>, configure: ListenUpdates) -> Result<()> {
+pub fn run(
+    state: Shared,
+    status: Arc<Mutex<Network>>,
+    configure: ListenUpdates,
+    phone: Option<Arc<crate::phone::Controller>>,
+) -> Result<()> {
     let window = Arc::new(Window::default());
     window.visible.store(true, Ordering::Relaxed);
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/localbell-icon.png"))?;
@@ -385,6 +448,7 @@ pub fn run(state: Shared, status: Arc<Mutex<Network>>, configure: ListenUpdates)
             Arc::clone(&window),
             icon.clone(),
             configure.clone(),
+            phone.clone(),
         )?;
         if let Some(tray) = &tray {
             tray.update(|_| ());
@@ -423,6 +487,7 @@ fn open_window(
     window: Arc<Window>,
     icon: egui::IconData,
     configure: ListenUpdates,
+    phone: Option<Arc<crate::phone::Controller>>,
 ) -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -494,6 +559,14 @@ fn open_window(
                 error: String::new(),
                 configure,
                 listen_form: None,
+                phone_host: phone
+                    .as_ref()
+                    .map_or_else(String::new, |value| value.host.clone()),
+                phone_port: phone
+                    .as_ref()
+                    .map_or_else(|| "19420".to_owned(), |value| value.port.to_string()),
+                phone_error: String::new(),
+                phone,
             }))
         }),
     )

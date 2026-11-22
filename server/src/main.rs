@@ -1,5 +1,6 @@
 mod api;
 mod listener;
+mod phone;
 mod state;
 mod tls;
 mod ui;
@@ -282,6 +283,15 @@ fn main() -> Result<()> {
         }
         Command::Run(listen, port) => (listen, port),
     };
+    use std::io::IsTerminal;
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("localbell=info"));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_ansi(std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none())
+        .without_time()
+        .init();
     rustls::crypto::ring::default_provider()
         .install_default()
         .map_err(|_| anyhow::anyhow!("Initialize TLS"))?;
@@ -315,6 +325,14 @@ fn main() -> Result<()> {
         ..Default::default()
     }));
     let runtime = tokio::runtime::Runtime::new()?;
+    let phone = if std::env::var_os("LOCALBELL_REVERSE_PREVIEW").is_some() {
+        Some(Arc::new(phone::Controller::start(
+            &runtime,
+            dir.join("phone-v1.json"),
+        )?))
+    } else {
+        None
+    };
     let task = runtime.spawn({
         let state = Arc::clone(&state);
         let status = Arc::clone(&status);
@@ -328,7 +346,7 @@ fn main() -> Result<()> {
             }
         }
     });
-    let result = ui::run(state, status, configure);
+    let result = ui::run(state, status, configure, phone);
     let _ = stop.send(true);
     let _ = runtime.block_on(async { tokio::time::timeout(Duration::from_secs(3), task).await });
     runtime.shutdown_timeout(Duration::from_secs(2));
