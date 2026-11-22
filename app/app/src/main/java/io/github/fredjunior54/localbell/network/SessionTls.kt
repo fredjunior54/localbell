@@ -14,7 +14,9 @@ import java.security.PrivateKey
 import java.security.cert.X509Certificate
 import java.security.spec.ECGenParameterSpec
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLEngine
 import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509ExtendedKeyManager
 
@@ -25,14 +27,18 @@ private constructor(
 ) {
     fun fingerprint(): ByteArray = MessageDigest.getInstance("SHA-256").digest(leaf.encoded)
 
+    fun createListener(): SSLServerSocket =
+        (context.serverSocketFactory.createServerSocket() as SSLServerSocket).apply {
+            useClientMode = false
+            enabledProtocols = arrayOf("TLSv1.3")
+            sslParameters = sslParameters.apply { applicationProtocols = arrayOf(ALPN) }
+        }
+
     /** Takes ownership of the socket. The caller must enforce an overall handshake deadline. */
     fun accept(socket: Socket): SSLSocket {
         try {
             if (!permitsPeer(socket.inetAddress)) throw IOException("Unsupported peer address")
-            val tls =
-                context.socketFactory.createSocket(socket, null, socket.port, true) as SSLSocket
-            tls.useClientMode = false
-            tls.enabledProtocols = arrayOf("TLSv1.3")
+            val tls = socket as SSLSocket
             tls.sslParameters = tls.sslParameters.apply { applicationProtocols = arrayOf(ALPN) }
             tls.soTimeout = HANDSHAKE_IDLE_MS
             tls.tcpNoDelay = true
@@ -48,7 +54,7 @@ private constructor(
     }
 
     companion object {
-        private const val ALIAS = "localbell-session-identity-v1"
+        private const val ALIAS = "localbell-session-tls-v1"
         private const val KEYSTORE = "AndroidKeyStore"
         private const val ALPN = "localbell/1"
         private const val HANDSHAKE_IDLE_MS = 5_000
@@ -60,7 +66,8 @@ private constructor(
                 val spec =
                     KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
                         .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-                        .setDigests(KeyProperties.DIGEST_SHA256)
+                        // Conscrypt can pass an already hashed TLS transcript to Android Keystore.
+                        .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256)
                         .build()
                 KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, KEYSTORE).apply {
                     initialize(spec)
@@ -110,6 +117,12 @@ private constructor(
                 keyType: String?,
                 issuers: Array<out Principal>?,
                 socket: Socket?,
+            ) = getServerAliases(keyType, issuers)?.firstOrNull()
+
+            override fun chooseEngineServerAlias(
+                keyType: String?,
+                issuers: Array<out Principal>?,
+                engine: SSLEngine?,
             ) = getServerAliases(keyType, issuers)?.firstOrNull()
 
             override fun getCertificateChain(alias: String?) =

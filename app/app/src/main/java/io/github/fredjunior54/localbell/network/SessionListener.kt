@@ -76,7 +76,7 @@ private constructor(
         fun bind(port: Int): SessionListener {
             require(port in 1..65535) { "Invalid listener port" }
             val identity = SessionTls.load()
-            val listener = ServerSocket()
+            val listener = identity.createListener()
             try {
                 listener.reuseAddress = true
                 listener.bind(InetSocketAddress("0.0.0.0", port), BACKLOG)

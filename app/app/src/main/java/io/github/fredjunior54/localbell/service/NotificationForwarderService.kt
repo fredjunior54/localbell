@@ -20,6 +20,8 @@ import io.github.fredjunior54.localbell.di.AppModule
 import io.github.fredjunior54.localbell.network.ApiClient
 import io.github.fredjunior54.localbell.network.DismissRequest
 import io.github.fredjunior54.localbell.network.NotificationRequest
+import io.github.fredjunior54.localbell.network.PhoneSessionRuntime
+import io.github.fredjunior54.localbell.network.SessionDelivery
 import io.github.fredjunior54.localbell.util.LocalNetworkPermission
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class NotificationForwarderService : NotificationListenerService() {
 
@@ -87,7 +90,22 @@ class NotificationForwarderService : NotificationListenerService() {
         serviceScope.launch {
             try {
                 settingsRepository.addKnownApp(sbn.packageName)
-                if (!shouldForward(sbn.packageName, sbn.key, sbn.notification)) return@launch
+                val reverse = PhoneSessionService.active
+                if (!shouldForward(sbn.packageName, sbn.key, sbn.notification, reverse != null))
+                    return@launch
+                if (reverse != null) {
+                    if (reverse.status.value.phase == PhoneSessionRuntime.Phase.READY) {
+                        val request =
+                            makeRequest(sbn)?.withArtwork(this@NotificationForwarderService, sbn)
+                        if (request != null)
+                            reverse.offer(
+                                SessionDelivery.Kind.AUTOMATIC,
+                                sbn.key,
+                                request.sessionPayload(),
+                            )
+                    }
+                    return@launch
+                }
                 val pairing = settingsRepository.pairing.first() ?: return@launch
                 val serverUrl =
                     healthMonitor.getServerUrlIfConnected(pairing.token)
@@ -106,8 +124,9 @@ class NotificationForwarderService : NotificationListenerService() {
         packageName: String,
         key: String,
         notification: Notification,
+        reverse: Boolean,
     ): Boolean {
-        if (!settingsRepository.serviceEnabled.first()) {
+        if (!reverse && !settingsRepository.serviceEnabled.first()) {
             Log.d(TAG, "Service disabled, skipping notification")
             return false
         }
@@ -115,11 +134,11 @@ class NotificationForwarderService : NotificationListenerService() {
             Log.d(TAG, "Blacklisted app, skipping: $packageName")
             return false
         }
-        if (settingsRepository.authToken.first().isBlank()) {
+        if (!reverse && settingsRepository.authToken.first().isBlank()) {
             Log.d(TAG, "Auth token not configured, skipping notification")
             return false
         }
-        if (settingsRepository.certFingerprint.first().isBlank()) {
+        if (!reverse && settingsRepository.certFingerprint.first().isBlank()) {
             Log.d(TAG, "Certificate fingerprint not configured, skipping notification")
             return false
         }
@@ -146,27 +165,7 @@ class NotificationForwarderService : NotificationListenerService() {
         authToken: String,
         certFingerprint: String,
     ) {
-        val notification = sbn.notification
-        val extras = notification.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-        if (text.isBlank()) {
-            Log.d(TAG, "Empty notification text, skipping")
-            return
-        }
-        val appName = getAppName(sbn.packageName)
-        val urgency = mapUrgency(notification.channelId)
-        val timeoutMs = notification.timeoutAfter.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
-        val request =
-            NotificationRequest(
-                key = sbn.key,
-                app_name = appName,
-                package_name = sbn.packageName,
-                title = title,
-                message = text,
-                urgency = urgency,
-                timeout_ms = if (timeoutMs > 0) timeoutMs else -1,
-            )
+        val request = makeRequest(sbn) ?: return
         try {
             val api = ApiClient.getApi(serverUrl, authToken, certFingerprint)
             val response = api.sendNotification(request.withArtwork(this, sbn))
@@ -178,6 +177,29 @@ class NotificationForwarderService : NotificationListenerService() {
         } catch (e: Exception) {
             Log.e(TAG, "Connection error: ${e.message}")
         }
+    }
+
+    private fun makeRequest(sbn: StatusBarNotification): NotificationRequest? {
+        val notification = sbn.notification
+        val extras = notification.extras
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        if (text.isBlank()) {
+            Log.d(TAG, "Empty notification text, skipping")
+            return null
+        }
+        val appName = getAppName(sbn.packageName)
+        val urgency = mapUrgency(notification.channelId)
+        val timeoutMs = notification.timeoutAfter.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
+        return NotificationRequest(
+            key = sbn.key,
+            app_name = appName,
+            package_name = sbn.packageName,
+            title = title,
+            message = text,
+            urgency = urgency,
+            timeout_ms = if (timeoutMs > 0) timeoutMs else -1,
+        )
     }
 
     private fun mapUrgency(channelId: String?): Int {
@@ -208,6 +230,10 @@ class NotificationForwarderService : NotificationListenerService() {
 
         serviceScope.launch {
             try {
+                PhoneSessionService.active?.let {
+                    it.offer(SessionDelivery.Kind.DISMISS, sbn.key)
+                    return@launch
+                }
                 val enabled = settingsRepository.serviceEnabled.first()
                 if (!enabled) return@launch
 
@@ -287,3 +313,13 @@ class NotificationForwarderService : NotificationListenerService() {
             .build()
     }
 }
+
+internal fun NotificationRequest.sessionPayload(): JSONObject =
+    JSONObject()
+        .put("key", key)
+        .put("app_name", app_name)
+        .put("title", title)
+        .put("message", message)
+        .put("urgency", urgency)
+        .put("timeout_ms", timeout_ms)
+        .put("icon_rgba", icon_rgba)

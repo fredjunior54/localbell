@@ -45,6 +45,15 @@
                 android:value="notification_forwarding" />
         </service>
 
+        <service
+            android:name=".service.PhoneSessionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="local_desktop_notification_session" />
+        </service>
+
     </application>
 
 </manifest>

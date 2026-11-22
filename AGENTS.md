@@ -25,6 +25,10 @@ make test-app        # gradle test
 make lint-app        # gradle lint + spotless
 ```
 
+### Autonomous verification
+
+Run every practical automated or noninteractive verification yourself, including isolated fixtures and available emulators. Do not ask the user to repeat checks you can run without physical interaction. Ask only for physical steps or device actions that require separate authorization. Do not publish a release, install an APK on a personal device, or send live notifications unless separately authorized.
+
 ### Android build cleanup
 
 For one-off builds, tests, and lint, prefer `--no-daemon` and `-Pkotlin.compiler.execution.strategy=in-process` when running Gradle directly. After Android work, including failed runs, check for idle Gradle and Kotlin daemons left by this checkout. Use `cd app && ./gradlew --status` to verify that no same-version builds are active before running `./gradlew --stop` from `app/`. If a Kotlin daemon from this run remains, verify its PID and ownership before sending it `SIGTERM`. Do not stop unrelated Java processes or reset swap.
