@@ -1,28 +1,16 @@
 package io.github.fredjunior54.localbell.service
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import io.github.fredjunior54.localbell.LocalBellApp
-import io.github.fredjunior54.localbell.MainActivity
-import io.github.fredjunior54.localbell.R
 import io.github.fredjunior54.localbell.di.AppModule
-import io.github.fredjunior54.localbell.network.ApiClient
-import io.github.fredjunior54.localbell.network.DismissRequest
 import io.github.fredjunior54.localbell.network.NotificationRequest
 import io.github.fredjunior54.localbell.network.PhoneSessionRuntime
 import io.github.fredjunior54.localbell.network.SessionDelivery
-import io.github.fredjunior54.localbell.util.LocalNetworkPermission
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,47 +24,16 @@ class NotificationForwarderService : NotificationListenerService() {
 
     companion object {
         private const val TAG = "NotificationForwarder"
-        private const val FOREGROUND_ID = 1
-        const val LOCAL_NETWORK_NOTIFICATION_ID = 2
         private const val PROGRESS_THROTTLE_MS = 2_000L
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val lastProgressForward = ConcurrentHashMap<String, Long>()
     private val settingsRepository by lazy { AppModule.settingsRepository }
-    private val healthMonitor by lazy { AppModule.healthMonitor }
-
-    override fun onCreate() {
-        super.onCreate()
-        Log.d(TAG, "Service created")
-    }
-
-    override fun onListenerConnected() {
-        super.onListenerConnected()
-        Log.d(TAG, "Listener connected")
-        startForeground(
-            FOREGROUND_ID,
-            createForegroundNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-        )
-        // The service cannot ask for permissions: after an update the user must open the app
-        if (LocalNetworkPermission.isMissing(this)) {
-            showLocalNetworkPermissionNotification()
-        }
-        healthMonitor.startMonitoring()
-    }
-
-    override fun onListenerDisconnected() {
-        super.onListenerDisconnected()
-        Log.d(TAG, "Listener disconnected")
-        healthMonitor.stopMonitoring()
-    }
 
     override fun onDestroy() {
-        super.onDestroy()
-        healthMonitor.stopMonitoring()
         serviceScope.cancel()
-        Log.d(TAG, "Service destroyed")
+        super.onDestroy()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -90,32 +47,14 @@ class NotificationForwarderService : NotificationListenerService() {
         serviceScope.launch {
             try {
                 settingsRepository.addKnownApp(sbn.packageName)
-                val reverse = PhoneSessionService.active
-                if (!shouldForward(sbn.packageName, sbn.key, sbn.notification, reverse != null))
-                    return@launch
-                if (reverse != null) {
-                    if (reverse.status.value.phase == PhoneSessionRuntime.Phase.READY) {
-                        val request =
-                            makeRequest(sbn)?.withArtwork(this@NotificationForwarderService, sbn)
-                        if (request != null)
-                            reverse.offer(
-                                SessionDelivery.Kind.AUTOMATIC,
-                                sbn.key,
-                                request.sessionPayload(),
-                            )
-                    }
-                    return@launch
-                }
-                val pairing = settingsRepository.pairing.first() ?: return@launch
-                val serverUrl =
-                    healthMonitor.getServerUrlIfConnected(pairing.token)
-                        ?: run {
-                            Log.d(TAG, "Server not connected, skipping notification")
-                            return@launch
-                        }
-                sendNotification(sbn, serverUrl, pairing.token, pairing.fingerprint)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error forwarding notification", e)
+                val reverse = PhoneSessionService.active ?: return@launch
+                if (reverse.status.value.phase != PhoneSessionRuntime.Phase.READY) return@launch
+                if (!shouldForward(sbn.packageName, sbn.key, sbn.notification)) return@launch
+                val request = makeRequest(sbn)?.withArtwork(this@NotificationForwarderService, sbn)
+                if (request != null)
+                    reverse.offer(SessionDelivery.Kind.AUTOMATIC, sbn.key, request.sessionPayload())
+            } catch (_: Exception) {
+                Log.e(TAG, "Error forwarding notification")
             }
         }
     }
@@ -124,24 +63,8 @@ class NotificationForwarderService : NotificationListenerService() {
         packageName: String,
         key: String,
         notification: Notification,
-        reverse: Boolean,
     ): Boolean {
-        if (!reverse && !settingsRepository.serviceEnabled.first()) {
-            Log.d(TAG, "Service disabled, skipping notification")
-            return false
-        }
-        if (packageName in settingsRepository.blacklistedApps.first()) {
-            Log.d(TAG, "Blacklisted app, skipping: $packageName")
-            return false
-        }
-        if (!reverse && settingsRepository.authToken.first().isBlank()) {
-            Log.d(TAG, "Auth token not configured, skipping notification")
-            return false
-        }
-        if (!reverse && settingsRepository.certFingerprint.first().isBlank()) {
-            Log.d(TAG, "Certificate fingerprint not configured, skipping notification")
-            return false
-        }
+        if (packageName in settingsRepository.blacklistedApps.first()) return false
         val progressMax = notification.extras.getInt(Notification.EXTRA_PROGRESS_MAX)
         if (progressMax > 0) {
             val progress = notification.extras.getInt(Notification.EXTRA_PROGRESS)
@@ -150,33 +73,13 @@ class NotificationForwarderService : NotificationListenerService() {
                 val now = System.currentTimeMillis()
                 val last = lastProgressForward[key] ?: 0L
                 if (now - last < PROGRESS_THROTTLE_MS) {
-                    Log.d(TAG, "Progress notification throttled: $key ($progress/$progressMax)")
+                    Log.d(TAG, "Progress notification throttled")
                     return false
                 }
                 lastProgressForward[key] = now
             }
         }
         return true
-    }
-
-    private suspend fun sendNotification(
-        sbn: StatusBarNotification,
-        serverUrl: String,
-        authToken: String,
-        certFingerprint: String,
-    ) {
-        val request = makeRequest(sbn) ?: return
-        try {
-            val api = ApiClient.getApi(serverUrl, authToken, certFingerprint)
-            val response = api.sendNotification(request.withArtwork(this, sbn))
-            if (response.isSuccessful) {
-                Log.d(TAG, "Notification forwarded successfully")
-            } else {
-                Log.e(TAG, "Failed to forward notification: ${response.code()}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Connection error: ${e.message}")
-        }
     }
 
     private fun makeRequest(sbn: StatusBarNotification): NotificationRequest? {
@@ -228,35 +131,7 @@ class NotificationForwarderService : NotificationListenerService() {
 
         lastProgressForward.remove(sbn.key)
 
-        serviceScope.launch {
-            try {
-                PhoneSessionService.active?.let {
-                    it.offer(SessionDelivery.Kind.DISMISS, sbn.key)
-                    return@launch
-                }
-                val enabled = settingsRepository.serviceEnabled.first()
-                if (!enabled) return@launch
-
-                val pairing = settingsRepository.pairing.first() ?: return@launch
-                val serverUrl =
-                    healthMonitor.getServerUrlIfConnected(pairing.token) ?: return@launch
-
-                try {
-                    val api = ApiClient.getApi(serverUrl, pairing.token, pairing.fingerprint)
-                    val response = api.dismissNotification(DismissRequest(key = sbn.key))
-
-                    if (response.isSuccessful) {
-                        Log.d(TAG, "Notification dismissed successfully")
-                    } else {
-                        Log.e(TAG, "Failed to dismiss notification: ${response.code()}")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Connection error dismissing notification: ${e.message}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error dismissing notification", e)
-            }
-        }
+        PhoneSessionService.active?.offer(SessionDelivery.Kind.DISMISS, sbn.key)
     }
 
     private fun getAppName(packageName: String): String {
@@ -267,50 +142,6 @@ class NotificationForwarderService : NotificationListenerService() {
         } catch (_: PackageManager.NameNotFoundException) {
             packageName
         }
-    }
-
-    private fun showLocalNetworkPermissionNotification() {
-        if (
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-        val pendingIntent =
-            PendingIntent.getActivity(
-                this,
-                0,
-                Intent(this, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-        val notification =
-            NotificationCompat.Builder(this, LocalBellApp.CHANNEL_ID)
-                .setContentTitle("LocalBell")
-                .setContentText("Open LocalBell to allow local network access")
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(true)
-                .build()
-        NotificationManagerCompat.from(this).notify(LOCAL_NETWORK_NOTIFICATION_ID, notification)
-    }
-
-    private fun createForegroundNotification(): Notification {
-        val pendingIntent =
-            PendingIntent.getActivity(
-                this,
-                0,
-                Intent(this, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-
-        return NotificationCompat.Builder(this, LocalBellApp.CHANNEL_ID)
-            .setContentTitle("LocalBell")
-            .setContentText("Forwarding notifications...")
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .setSilent(true)
-            .build()
     }
 }
 

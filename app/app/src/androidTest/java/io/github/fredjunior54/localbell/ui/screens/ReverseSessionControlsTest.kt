@@ -25,9 +25,7 @@ class ReverseSessionControlsTest {
     @Test
     fun showsListenerSettingsAndDisablesTheTestActionUntilConnected() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val launch =
-            Intent(context, MainActivity::class.java)
-                .putExtra("io.github.fredjunior54.localbell.REVERSE_PREVIEW", true)
+        val launch = Intent(context, MainActivity::class.java)
         ActivityScenario.launch<MainActivity>(launch).use {
             try {
                 compose.onNodeWithText("Server Configuration").assertDoesNotExist()
@@ -55,9 +53,7 @@ class ReverseSessionControlsTest {
         check(!context.noBackupFilesDir.resolve("desktop-v1.digest").exists()) {
             "Use a fresh isolated emulator without a saved LocalBell pairing"
         }
-        val launch =
-            Intent(context, MainActivity::class.java)
-                .putExtra("io.github.fredjunior54.localbell.REVERSE_PREVIEW", true)
+        val launch = Intent(context, MainActivity::class.java)
         ActivityScenario.launch<MainActivity>(launch).use {
             try {
                 awaitText("Numbers match")

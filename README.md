@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.18</strong></p>
+<p align="center"><strong>Version 1.4.19</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -26,26 +26,24 @@ Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a
 
 ## 🔔 How it works
 
-1. Open LocalBell on your Linux desktop.
-2. Open **Server Configuration** on Android, enter the receiver address and port, and tap **Pair**. Compare the six-digit number on both screens. If it matches, tap **Numbers match** on Android and select **Accept** on Linux.
-3. Grant **Notification Access** on Android, and check that **Forwarding** is active once the receiver is connected. New pairings enable forwarding by default; you can turn it off at any time. LocalBell delivers notifications to your desktop over the local network.
+1. Open LocalBell on Android. In **Listener settings**, check the port (default `19420`) and tap **Start listening** if needed. Allow local network access if prompted on Android 17 or later.
+2. On Linux, enter the phone's IPv4 address or hostname and port under **Phone Configuration**, then select **Pair**. Compare the six-digit number and confirm on both devices.
+3. Grant **Notification Access** on Android to forward eligible alerts automatically. Use **Send Test Notification** and check **Status** to verify delivery.
 
-On Android 17 or later, allow local network access if prompted while pairing.
-
-For an optional Tailscale connection, see the [setup guide](docs/getting-started.md#connect-over-tailscale). The same number check applies. The receiver stores its identity and paired-device credentials under `~/.config/localbell/` by default.
+Linux initiates and maintains an encrypted session; Android makes no delivery attempts while disconnected. Both apps must be updated together when moving from the old HTTPS setup. Pair once again; app filters stay unchanged. See the [setup guide](docs/getting-started.md#connect-over-tailscale) for Tailscale.
 
 ## ✨ Features
 
-- **Pair by address:** Enter the receiver’s IP or hostname, compare a six-digit number, and approve. No QR scan or code entry.
-- **Encrypted, direct delivery:** Notifications travel over certificate-pinned HTTPS on your LAN or Tailscale network. No account or cloud relay.
+- **Pair by address:** Enter the phone’s IP or hostname, compare a six-digit number, and approve. No QR scan or code entry.
+- **Encrypted, direct delivery:** Notifications travel over certificate-pinned TLS on your LAN or Tailscale network. No account or cloud relay.
 - **Native Linux notifications:** Get alerts through your desktop’s D-Bus notification service. Dismissing an alert on your phone also dismisses it on Linux.
-- **Test delivery:** Send a sample directly to a connected receiver without enabling forwarding.
+- **Test delivery:** Send a sample to a ready desktop without granting notification access.
 - **Android app artwork:** Compatible Linux notification daemons can display the source app icon without a cloud lookup. Linux sends it directly over the session D-Bus.
 - **Per-app filters:** Choose which Android apps can forward notifications.
 
 ## 🚀 Quick start
 
-### 🐧 Server (Linux)
+### 🐧 Desktop (Linux)
 
 Download `localbell-X.Y.Z-linux-amd64.tar.gz` from [GitHub Releases](https://github.com/fredjunior54/localbell/releases/latest). From a terminal in your desktop session, extract and start it:
 
@@ -56,26 +54,24 @@ tar -xzf localbell-X.Y.Z-linux-amd64.tar.gz
 
 Run `./localbell --help` to list the CLI options or `./localbell --version` to print the installed version. Neither command opens a window.
 
-On first run, the receiver listens on `0.0.0.0:19420` (all IPv4 interfaces) and accepts only connections from supported private networks. In **Listen settings**, set a specific LAN or Tailscale IPv4 address and port to restrict the listener to that address. Enter a reachable address and the configured port on Android, not `0.0.0.0`. The desktop uses the Catppuccin Mocha palette.
-
-`--listen=IP` and `--port=PORT` override saved settings for one session; **Apply** in the dialog saves both values. If the phone cannot reconnect after an address or port change, remove its saved pairing on Linux and pair again using the new endpoint. Click the tray icon to show or hide the window. Closing the window keeps forwarding active when a tray host is available; **Quit** stops LocalBell. GNOME may require the AppIndicator and KStatusNotifierItem Support extension.
+Configure the phone address and port in the desktop window. Click the tray icon to show or hide the window. Closing the window keeps the session active when a tray host is available; **Quit** stops LocalBell. GNOME may require the AppIndicator and KStatusNotifierItem Support extension.
 
 ### 📱 App (Android)
 
-Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. When upgrading from the old browser-based receiver, stop it first, update both apps, and pair again. After updating to Android version 1.3.9 from an earlier version, re-enable notification access in Android Settings and pair again.
+Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. The listener binds IPv4 on port `19420` by default and rejects nonlocal peers before TLS. A wildcard bind is not VPN-only.
 
 ## 📋 Requirements
 
 | Component   | Requirement                                                                          |
 | ----------- | ------------------------------------------------------------------------------------ |
-| **Server**  | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
+| **Desktop**  | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
 | **App**     | Android 14 or later (API 34+)                                                        |
 | **Network** | Both devices reachable on the same LAN or tailnet                                               |
 
 ## 🔒 Security
 
-- **TLS** encrypts notifications in transit. The Android app pins the certificate verified during the numeric comparison.
-- A pairing request expires after two minutes. Only one new phone can be paired at a time. Remove a phone in the desktop window to revoke its credential. No code entry or account is required.
+- **TLS** encrypts notifications in transit. The Linux client pins the Android certificate verified during the numeric comparison.
+- Only one desktop pairing is active. **Unpair** on Android revokes it even while the desktop is offline. Linux stores its paired phone configuration under `~/.config/localbell/` by default.
 
 ## 🛠️ Development
 

@@ -3,10 +3,10 @@
 ## What is this project
 
 LocalBell forwards Android push notifications to a Linux desktop via D-Bus.
-- `server/`: Rust/egui Linux desktop receiver, HTTPS API, mDNS discovery, and D-Bus notifications.
-- `app/`: Android notification capture, address-based pairing, and certificate-pinned HTTPS delivery.
+- `server/`: Rust/egui desktop client that maintains a pinned TLS connection and delivers notifications through D-Bus.
+- `app/`: Android foreground TLS listener, pairing and revocation, app filtering, and notification capture.
 
-Enter the receiver address on Android, compare the six-digit number, confirm on Android, and accept on Linux. The desktop defaults to `0.0.0.0:19420` with private TCP peer filtering. Use **Listen settings** for a persistent specific bind or `--listen=IP` and `--port=PORT` for session overrides. Existing saved pairings continue to work. The tray hides or shows the window; Quit stops the receiver. The versioned LAN protocol is documented in `docs/protocol.md`.
+Enter the phone address and port in **Phone Configuration** on Linux and confirm the matching six-digit number on both devices. Android listens on IPv4 port `19420` by default and does not queue notifications across sessions. Linux reconnects automatically. Remove the pairing on both devices before changing peers; upgrading from legacy HTTPS requires pairing again. See `docs/protocol.md` for the versioned LAN protocol.
 
 ## Android design
 

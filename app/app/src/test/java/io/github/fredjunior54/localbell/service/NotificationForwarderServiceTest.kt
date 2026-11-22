@@ -11,7 +11,6 @@ import io.mockk.mockkObject
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.flowOf
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -33,12 +32,12 @@ class NotificationForwarderServiceTest {
     fun setup() {
         mockkObject(AppModule)
         every { AppModule.settingsRepository } returns settingsRepository
-        // Every forwarded notification first records its app, then stops at serviceEnabled
+        // Every forwarded notification first records its app, then stops if there is no active
+        // session
         coEvery { settingsRepository.addKnownApp(any()) } answers
             {
                 processedPackages += firstArg<String>()
             }
-        every { settingsRepository.serviceEnabled } returns flowOf(false)
         // Run the service coroutines inline so the assertions see their effects
         mockkStatic(Dispatchers::class)
         every { Dispatchers.IO } returns Dispatchers.Unconfined

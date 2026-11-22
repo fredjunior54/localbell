@@ -1,13 +1,13 @@
-use crate::{ListenUpdates, Network, Shared, listener};
+use crate::phone::Controller;
 use anyhow::Result;
 use eframe::egui::{self, Color32, FontFamily, Stroke, ViewportCommand};
 use ksni::{MenuItem, blocking::TrayMethods, menu::StandardItem};
 use std::{
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 // Catppuccin Mocha (https://github.com/catppuccin/catppuccin).
@@ -28,7 +28,6 @@ const ACTION_HEIGHT: f32 = 32.0;
 const SETTINGS_ICON: char = '\u{f013}';
 const TRASH_ICON: char = '\u{f014}';
 const PHONE_ICON: char = '\u{f10b}';
-const SERVER_ICON: char = '\u{f233}';
 const PAIR_ICON: char = '\u{f023}';
 
 fn symbol_family() -> FontFamily {
@@ -69,16 +68,6 @@ fn action(
         enabled,
         egui::Button::new(label).min_size(egui::vec2(0.0, ACTION_HEIGHT)),
     )
-}
-
-fn device_row<R>(
-    ui: &mut egui::Ui,
-    content: impl FnOnce(&mut egui::Ui) -> R,
-) -> egui::InnerResponse<R> {
-    ui.scope(|ui| {
-        ui.spacing_mut().interact_size.y = ACTION_HEIGHT;
-        ui.horizontal_wrapped(content).inner
-    })
 }
 
 fn surface(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
@@ -142,42 +131,14 @@ impl ksni::Tray for Tray {
     }
 }
 
-struct ListenForm {
-    address: String,
-    port: String,
-    error: Option<String>,
-}
-
-impl ListenForm {
-    fn validate(&self) -> Result<listener::Settings> {
-        listener::Settings {
-            address: self
-                .address
-                .trim()
-                .parse()
-                .map_err(|_| anyhow::anyhow!("Enter a valid IPv4 address."))?,
-            port: self
-                .port
-                .trim()
-                .parse()
-                .map_err(|_| anyhow::anyhow!("Port must be between 1 and 65535."))?,
-        }
-        .validate()
-    }
-}
-
 struct App {
-    state: Shared,
-    status: Arc<Mutex<Network>>,
     window: Arc<Window>,
-    error: String,
-    configure: ListenUpdates,
-    listen_form: Option<ListenForm>,
-    phone: Option<Arc<crate::phone::Controller>>,
+    phone: Arc<Controller>,
     phone_host: String,
     phone_port: String,
     phone_error: String,
 }
+
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(150));
@@ -204,73 +165,24 @@ impl eframe::App for App {
                     .inner_margin(egui::Margin::same(20)),
             )
             .show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| self.content(ui));
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.heading(egui::RichText::new("LocalBell").size(36.0).color(MAUVE));
+                    ui.add_space(SECTION_GAP);
+                    self.phone_controls(ui);
+                });
             });
-        self.listen_dialog(ui.ctx());
     }
 }
 
 impl App {
-    fn listen_dialog(&mut self, ctx: &egui::Context) {
-        let Some(mut form) = self.listen_form.take() else {
-            return;
-        };
-        let mut apply = false;
-        let mut cancel = false;
-        let response = egui::Modal::new(egui::Id::new("listen-settings")).show(ctx, |ui| {
-            ui.set_max_width(380.0);
-            section(ui, SETTINGS_ICON, "Listen Settings");
-            ui.add_space(SECTION_GAP);
-            ui.label("Listen address");
-            ui.text_edit_singleline(&mut form.address);
-            ui.add_space(GAP);
-            ui.label("Port");
-            ui.text_edit_singleline(&mut form.port);
-            ui.add_space(GAP);
-            ui.label("Use 0.0.0.0 for all IPv4 interfaces, or enter one LAN or Tailscale address.");
-            if let Some(error) = &form.error {
-                ui.colored_label(RED, error);
-            }
-            ui.add_space(SECTION_GAP);
-            ui.horizontal(|ui| {
-                apply = action(ui, '\u{f00c}', "Apply", MAUVE, true).clicked();
-                cancel = action(ui, '\u{f00d}', "Cancel", TEXT, true).clicked();
-            });
-        });
-        if cancel || response.should_close() {
-            return;
-        }
-        if apply {
-            let result = form.validate().and_then(|settings| {
-                let mut status = self
-                    .status
-                    .lock()
-                    .map_err(|_| anyhow::anyhow!("Receiver status is unavailable."))?;
-                self.configure.try_send(settings).map_err(|_| {
-                    anyhow::anyhow!("Receiver is unavailable or already applying settings.")
-                })?;
-                status.applying = true;
-                status.error = None;
-                Ok(())
-            });
-            match result {
-                Ok(()) => return,
-                Err(error) => form.error = Some(error.to_string()),
-            }
-        }
-        self.listen_form = Some(form);
-    }
-
     fn phone_controls(&mut self, ui: &mut egui::Ui) {
-        let Some(phone) = &self.phone else {
-            return;
-        };
+        let phone = &self.phone;
         let (message, busy, saved) = {
             let status = phone.status.lock().unwrap();
             (status.message, status.busy, status.saved)
         };
         surface(ui, |ui| {
-            section(ui, SERVER_ICON, "Phone Configuration");
+            section(ui, PHONE_ICON, "Phone Configuration");
             ui.label(message);
             if !saved {
                 ui.label("Phone address");
@@ -288,7 +200,7 @@ impl App {
                         .err()
                         .map_or_else(String::new, |error| error.to_string());
                 }
-            } else if action(ui, SETTINGS_ICON, "Remove Pairing", RED, true).clicked() {
+            } else if action(ui, TRASH_ICON, "Remove Pairing", RED, true).clicked() {
                 self.phone_error = phone
                     .forget()
                     .err()
@@ -297,7 +209,7 @@ impl App {
             let mut status = phone.status.lock().unwrap();
             if let Some((number, _)) = &status.comparison {
                 ui.label(format!("Compare this number with the phone: {number}"));
-                let accept = action(ui, SETTINGS_ICON, "Numbers Match", MAUVE, true).clicked();
+                let accept = action(ui, PAIR_ICON, "Numbers Match", MAUVE, true).clicked();
                 let decline = action(ui, SETTINGS_ICON, "Cancel", RED, true).clicked();
                 if (accept || decline)
                     && let Some((_, response)) = status.comparison.take()
@@ -310,117 +222,9 @@ impl App {
             }
         });
     }
-
-    fn content(&mut self, ui: &mut egui::Ui) {
-        let status_arc = Arc::clone(&self.status);
-        let state_arc = Arc::clone(&self.state);
-        let Ok(status) = status_arc.lock() else {
-            return;
-        };
-        let Ok(mut state) = state_arc.lock() else {
-            return;
-        };
-        ui.heading(egui::RichText::new("LocalBell").size(36.0).color(MAUVE));
-        ui.add_space(SECTION_GAP);
-        self.phone_controls(ui);
-        ui.add_space(SECTION_GAP);
-        surface(ui, |ui| {
-            section(ui, SERVER_ICON, "Receiver");
-            ui.add_space(GAP);
-            ui.label(&status.message);
-            if status.applying {
-                ui.label("Applying listen settings…");
-            }
-            if let Some(error) = &status.error {
-                ui.colored_label(RED, error);
-            }
-            ui.add_space(GAP);
-            if action(
-                ui,
-                SETTINGS_ICON,
-                "Listen Settings",
-                MAUVE,
-                !status.applying,
-            )
-            .clicked()
-            {
-                self.listen_form = Some(ListenForm {
-                    address: status.settings.address.to_string(),
-                    port: status.settings.port.to_string(),
-                    error: None,
-                });
-            }
-        });
-        ui.add_space(SECTION_GAP);
-        state.expire();
-        if let Some(pair) = state.pairing.as_mut().filter(|p| p.comparison.is_some()) {
-            pair.shown = true;
-            section(ui, PAIR_ICON, "Pairing Request");
-            ui.label(&pair.name);
-            ui.label("Accept only if the six-digit number matches the phone.");
-            ui.label(
-                egui::RichText::new(pair.comparison.as_deref().unwrap_or_default()).monospace(),
-            );
-            ui.label(format!(
-                "{}s remaining",
-                pair.until
-                    .saturating_duration_since(Instant::now())
-                    .as_secs()
-            ));
-            let mut reject = false;
-            ui.horizontal(|ui| {
-                reject = ui.button("Reject").clicked();
-                if ui
-                    .add_enabled(!pair.approved, egui::Button::new("Accept"))
-                    .clicked()
-                {
-                    pair.approved = true;
-                }
-            });
-            if pair.approved {
-                ui.label("Waiting for the phone to finish pairing…");
-            }
-            if reject {
-                state.pairing = None;
-            }
-        } else if state.devices.is_empty() {
-            ui.label("Enter the listening address on your phone to pair.");
-        }
-        ui.add_space(SECTION_GAP);
-        let mut remove = None;
-        surface(ui, |ui| {
-            section(ui, PHONE_ICON, "Paired Devices");
-            ui.add_space(GAP);
-            if state.devices.is_empty() {
-                ui.label("No devices paired.");
-            }
-            for device in &state.devices {
-                device_row(ui, |ui| {
-                    ui.label(&device.name);
-                    if action(ui, TRASH_ICON, "Remove", RED, true).clicked() {
-                        remove = Some(device.id.clone());
-                    }
-                });
-            }
-        });
-        if let Some(id) = remove {
-            self.error = state
-                .revoke(&id)
-                .err()
-                .map_or_else(String::new, |e| e.to_string());
-        }
-        if !self.error.is_empty() {
-            ui.colored_label(RED, &self.error);
-        }
-    }
 }
 
-pub fn run(
-    state: Shared,
-    status: Arc<Mutex<Network>>,
-    configure: ListenUpdates,
-    phone: Option<Arc<crate::phone::Controller>>,
-) -> Result<()> {
+pub fn run(phone: Arc<Controller>) -> Result<()> {
     let window = Arc::new(Window::default());
     window.visible.store(true, Ordering::Relaxed);
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/localbell-icon.png"))?;
@@ -442,30 +246,13 @@ pub fn run(
     .spawn()
     .ok();
     loop {
-        open_window(
-            Arc::clone(&state),
-            Arc::clone(&status),
-            Arc::clone(&window),
-            icon.clone(),
-            configure.clone(),
-            phone.clone(),
-        )?;
+        open_window(Arc::clone(&window), icon.clone(), Arc::clone(&phone))?;
         if let Some(tray) = &tray {
             tray.update(|_| ());
         } else {
             break;
         }
         while !window.visible.load(Ordering::Relaxed) && !window.quit.load(Ordering::Relaxed) {
-            if let Ok(mut state) = state.lock() {
-                state.expire();
-                if state
-                    .pairing
-                    .as_ref()
-                    .is_some_and(|p| !p.shown && p.comparison.is_some())
-                {
-                    window.visible.store(true, Ordering::Relaxed);
-                }
-            }
             std::thread::sleep(Duration::from_millis(100));
         }
         if window.quit.load(Ordering::Relaxed) {
@@ -481,14 +268,7 @@ pub fn run(
     Ok(())
 }
 
-fn open_window(
-    state: Shared,
-    status: Arc<Mutex<Network>>,
-    window: Arc<Window>,
-    icon: egui::IconData,
-    configure: ListenUpdates,
-    phone: Option<Arc<crate::phone::Controller>>,
-) -> Result<()> {
+fn open_window(window: Arc<Window>, icon: egui::IconData, phone: Arc<Controller>) -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_app_id("localbell")
@@ -553,58 +333,13 @@ fn open_window(
                 style.spacing.window_margin = egui::Margin::same(INSET);
             });
             Ok(Box::new(App {
-                state,
-                status,
                 window,
-                error: String::new(),
-                configure,
-                listen_form: None,
-                phone_host: phone
-                    .as_ref()
-                    .map_or_else(String::new, |value| value.host.clone()),
-                phone_port: phone
-                    .as_ref()
-                    .map_or_else(|| "19420".to_owned(), |value| value.port.to_string()),
+                phone_host: phone.host.clone(),
+                phone_port: phone.port.to_string(),
                 phone_error: String::new(),
                 phone,
             }))
         }),
     )
     .map_err(|e| anyhow::anyhow!("Open desktop window: {e}"))
-}
-
-#[cfg(test)]
-#[test]
-fn comparison_vector_preserves_leading_zero_and_binds_leaf() {
-    let (code, nonce, challenge) = (
-        "1".repeat(64),
-        "2".repeat(64),
-        "0000000000000000000000000000000000000000000000000000000000000000",
-    );
-    assert_eq!(
-        crate::state::commitment(&"0".repeat(64), &code, challenge),
-        "e4a52592cf444899d4d5a8dd5b0fa2964e6908a323b8b43720ffb2dcffdce2d0"
-    );
-    assert_eq!(
-        crate::state::comparison(&"0".repeat(64), &code, &nonce, challenge),
-        "011659"
-    );
-    assert_ne!(
-        crate::state::comparison(&"3".repeat(64), &code, &nonce, challenge),
-        "011659"
-    );
-}
-
-#[test]
-fn device_name_and_remove_share_a_vertical_center() {
-    egui::__run_test_ui(|ui| {
-        let (name, button) = device_row(ui, |ui| {
-            (
-                ui.label("Android phone"),
-                ui.add(egui::Button::new("Remove").min_size(egui::vec2(0.0, ACTION_HEIGHT))),
-            )
-        })
-        .inner;
-        assert!((name.rect.center().y - button.rect.center().y).abs() <= 0.5);
-    });
 }

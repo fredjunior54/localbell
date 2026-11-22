@@ -3,7 +3,7 @@ layout: default
 title: LocalBell - Forward Android Notifications to Linux Desktop
 description: >-
   Mirror your Android notifications to your Linux desktop over your local network.
-  Encrypted with TLS, auto-discovery via mDNS, zero configuration.
+  Encrypted with TLS and paired by phone address.
   Works with GNOME, KDE, XFCE, i3, Sway. Open source (AGPL-3.0).
 ---
 
@@ -13,48 +13,26 @@ Forward your Android notifications to your Linux desktop.
 
 ## Overview
 
-LocalBell is a simple tool that sends your phone notifications directly to your Linux desktop. WhatsApp, Telegram, calls — everything. All communication stays on your local network — no cloud, no accounts, no tracking.
+LocalBell forwards Android notifications directly to your Linux desktop over an encrypted, local connection. No account or cloud relay is required.
 
 ## How It Works
 
-```
-┌──────────────┐      HTTPS/TLS       ┌──────────────┐
-│              │    Local Network     │              │
-│   Android    │ ──────────────────►  │    Linux     │
-│    Phone     │    mDNS Discovery    │   Desktop    │
-│              │                      │              │
-└──────────────┘                      └──────────────┘
-```
-
-1. Install the server on your Linux machine
-2. Open the app on your Android phone
-3. Enter the receiver address on Android, compare the six-digit number, confirm on Android, and approve on Linux
-4. Done — notifications appear on your desktop
-
-The server and app find each other automatically using mDNS. All communication is encrypted with TLS.
+Android listens on TCP port `19420` by default. Enter the phone address and port on Linux, compare the six digits, and approve on both devices. After pairing, Linux reconnects automatically and Android forwards eligible notifications whenever the desktop is ready.
 
 ## Features
 
-| | Feature | Description |
-|---|---|---|
-| 🔒 | **Zero cloud** | Everything stays on your local network |
-| 🔐 | **Encrypted** | TLS with auto-generated certificates |
-| ✨ | **Zero config** | mDNS auto-discovery, no IP addresses to type |
-| 🔋 | **Battery friendly** | Minimal impact on your phone |
-| 🐧 | **Works everywhere** | GNOME, KDE, XFCE, i3, Sway... |
+- TLS certificate pinning and explicit pairing approval
+- Native Linux notifications through D-Bus, including available Android app artwork
+- Android app filtering, delivery status, test notifications, and local unpairing
 
 ## Quick Start
 
-Download the signed Android APK and Linux amd64 archive from [GitHub Releases](https://github.com/fredjunior54/localbell/releases/latest). Follow the [setup guide](getting-started.md) to install and pair them.
+Download the APK and Linux archive from [GitHub Releases](https://github.com/fredjunior54/localbell/releases/latest). Follow the [setup guide](getting-started.md).
 
 ## Documentation
 
-- [Getting Started](getting-started.md) — Installation and setup guide
-- [Architecture](architecture.md) — How LocalBell works under the hood
-- [Security](security.md) — Encryption, authentication, and privacy details
-- [Troubleshooting](troubleshooting.md) — Common issues and solutions
+- [Getting Started](getting-started.md)
+- [Architecture](architecture.md)
+- [Security](security.md)
+- [Troubleshooting](troubleshooting.md)
 - [Privacy Policy](privacy.md)
-
-## Links
-
-- [GitHub Repository](https://github.com/fredjunior54/localbell)

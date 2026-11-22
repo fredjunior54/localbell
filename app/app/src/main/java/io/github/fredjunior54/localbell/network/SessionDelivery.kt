@@ -30,8 +30,15 @@ internal class SessionDelivery(
     private val queue = Channel<Event>(CAPACITY)
     private val pending = AtomicReference<Pending?>()
 
-    fun offer(kind: Kind, key: String, payload: JSONObject? = null): Boolean =
-        queue.trySend(Event(kind, key, payload)).isSuccess
+    fun offer(kind: Kind, key: String, payload: JSONObject? = null): Boolean {
+        if (
+            payload != null &&
+                payload.toString().encodeToByteArray().size >
+                    SessionFrame.MAX_PAYLOAD - FRAME_OVERHEAD
+        )
+            return false
+        return queue.trySend(Event(kind, key, payload)).isSuccess
+    }
 
     suspend fun run(): Unit = coroutineScope {
         val writer =
@@ -110,6 +117,7 @@ internal class SessionDelivery(
 
     companion object {
         internal const val CAPACITY = 16
+        private const val FRAME_OVERHEAD = 80
         private const val MAX_TRACKED = 4096
         private const val ACK_TIMEOUT_MS = 8_000L
     }

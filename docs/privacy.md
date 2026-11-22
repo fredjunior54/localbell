@@ -26,14 +26,14 @@ LocalBell requires **notification access permission** to read your Android notif
 - No analytics or tracking
 - No advertisements
 - No cloud services
-- No account or authentication required
+- No account required; the devices authenticate locally
 - No third-party data sharing
 
 ## Network communication
 
 All communication occurs exclusively within your local network:
 
-- Your Android device connects directly to the LocalBell server running on your Linux desktop
+- Your Linux desktop connects directly to the Android listener
 - Connection is authenticated using a unique token generated during setup
 - All traffic is encrypted with TLS and certificate pinning
 - No internet connection is required after initial app download
@@ -43,7 +43,7 @@ All communication occurs exclusively within your local network:
 | Permission | Purpose |
 |------------|---------|
 | Notification Access | Read notifications to forward them to your desktop |
-| Local Network | Communicate with LocalBell server on your LAN |
+| Local Network | Allow the desktop to reach LocalBell over the LAN |
 
 ## Open Source
 

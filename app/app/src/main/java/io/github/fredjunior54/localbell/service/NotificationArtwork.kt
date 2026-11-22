@@ -6,13 +6,11 @@ import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.service.notification.StatusBarNotification
 import android.util.Base64
-import com.google.gson.Gson
 import io.github.fredjunior54.localbell.network.NotificationRequest
 import kotlin.math.roundToInt
 
 private const val SIDE = 48
-private const val MAX_REQUEST_BYTES = 32 * 1024
-private val gson = Gson()
+private const val MAX_REQUEST_BYTES = 32 * 1024 - 80
 
 internal fun NotificationRequest.withArtwork(
     context: Context,
@@ -39,7 +37,7 @@ private fun appArtwork(context: Context, packageName: String): String? = runCatc
 private fun NotificationRequest.withEncodedArtwork(artwork: String?): NotificationRequest {
     if (artwork == null) return this
     val decorated = copy(icon_rgba = artwork)
-    return if (gson.toJson(decorated).toByteArray(Charsets.UTF_8).size <= MAX_REQUEST_BYTES)
+    return if (decorated.sessionPayload().toString().encodeToByteArray().size <= MAX_REQUEST_BYTES)
         decorated
     else this
 }

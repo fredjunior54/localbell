@@ -1,6 +1,6 @@
 use crate::{
-    api::{self, DesktopSink, Sink},
-    listener, state,
+    desktop::{self, DesktopSink, Sink},
+    state,
 };
 use anyhow::{Context, Result, ensure};
 use localbell::{
@@ -196,6 +196,13 @@ fn message(status: &Mutex<Status>, value: &'static str) {
     status.lock().unwrap().message = value;
 }
 
+fn permitted(address: std::net::Ipv4Addr) -> bool {
+    let [first, second, ..] = address.octets();
+    address.is_private()
+        || address.is_link_local()
+        || (first == 100 && (64..=127).contains(&second))
+}
+
 async fn resolve(settings: &Settings) -> Result<SocketAddrV4> {
     tokio::time::timeout(
         Duration::from_secs(5),
@@ -203,7 +210,7 @@ async fn resolve(settings: &Settings) -> Result<SocketAddrV4> {
     )
     .await??
     .find_map(|addr| match addr {
-        SocketAddr::V4(value) if listener::permitted(*value.ip()) => Some(value),
+        SocketAddr::V4(value) if permitted(*value.ip()) => Some(value),
         _ => None,
     })
     .context("No permitted phone IPv4 address")
@@ -242,7 +249,7 @@ async fn enroll(mut settings: Settings, status: &Mutex<Status>, path: &Path) -> 
 async fn ready() -> bool {
     tokio::time::timeout(Duration::from_secs(2), async {
         let bus = zbus::Connection::session().await?;
-        api::notifications_proxy(&bus)
+        desktop::notifications_proxy(&bus)
             .await?
             .call::<_, _, Vec<String>>("GetCapabilities", &())
             .await
@@ -307,7 +314,7 @@ async fn watch_readiness(previous: bool) {
 pub(crate) async fn deliver(active: &mut HashMap<String, u32>, event: Event) -> Result<bool> {
     match event {
         Event::Notification(payload) => {
-            let item: api::Notification = serde_json::from_value(payload)?;
+            let item: desktop::Notification = serde_json::from_value(payload)?;
             ensure!(
                 !item.key.is_empty() && item.key.len() <= 1024 && item.urgency <= 2,
                 "Invalid notification fields"

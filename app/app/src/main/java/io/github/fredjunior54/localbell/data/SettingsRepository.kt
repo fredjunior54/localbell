@@ -1,21 +1,11 @@
 package io.github.fredjunior54.localbell.data
 
 import android.content.Context
-import android.util.Base64
-import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.google.crypto.tink.Aead
-import com.google.crypto.tink.RegistryConfiguration
-import com.google.crypto.tink.aead.AeadConfig
-import com.google.crypto.tink.aead.AesGcmKeyManager
-import com.google.crypto.tink.integration.android.AndroidKeysetManager
-import java.security.KeyStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -25,165 +15,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class SettingsRepository(private val context: Context) {
 
     companion object {
-        private const val TAG = "SettingsRepository"
-        private const val KEYSET_NAME = "localbell_keyset"
-        private const val PREF_FILE_NAME = "localbell_keyset_prefs"
-        private const val MASTER_KEY_ALIAS = "localbell_master_key"
-        private const val MASTER_KEY_URI = "android-keystore://$MASTER_KEY_ALIAS"
-
-        // Keys for DataStore
-        private val AUTH_TOKEN = stringPreferencesKey("auth_token")
-        private val CERT_FINGERPRINT = stringPreferencesKey("cert_fingerprint")
-        private val SERVICE_ENABLED = booleanPreferencesKey("service_enabled")
-        private val CACHED_SERVER_URL = stringPreferencesKey("cached_server_url")
         private val KNOWN_APPS = stringSetPreferencesKey("known_apps")
         private val BLACKLISTED_APPS = stringSetPreferencesKey("blacklisted_apps")
-    }
-
-    private val aead: Aead by lazy {
-        AeadConfig.register()
-        try {
-            createAead()
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to load existing keys, recreating: ${e.message}")
-            resetEncryptionKeys()
-            createAead()
-        }
-    }
-
-    private fun createAead(): Aead {
-        val keysetHandle =
-            AndroidKeysetManager.Builder()
-                .withSharedPref(context, KEYSET_NAME, PREF_FILE_NAME)
-                .withKeyTemplate(AesGcmKeyManager.aes256GcmTemplate())
-                .withMasterKeyUri(MASTER_KEY_URI)
-                .build()
-                .keysetHandle
-        return keysetHandle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
-    }
-
-    private fun resetEncryptionKeys() {
-        try {
-            val keyStore = KeyStore.getInstance("AndroidKeyStore")
-            keyStore.load(null)
-            if (keyStore.containsAlias(MASTER_KEY_ALIAS)) {
-                keyStore.deleteEntry(MASTER_KEY_ALIAS)
-                Log.i(TAG, "Deleted corrupted master key from KeyStore")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to delete master key: ${e.message}")
-        }
-
-        try {
-            context
-                .getSharedPreferences(PREF_FILE_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .clear()
-                .apply()
-            Log.i(TAG, "Cleared keyset preferences")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to clear keyset prefs: ${e.message}")
-        }
-    }
-
-    private fun encrypt(plaintext: String): String {
-        if (plaintext.isBlank()) return ""
-        val ciphertext = aead.encrypt(plaintext.toByteArray(Charsets.UTF_8), null)
-        return Base64.encodeToString(ciphertext, Base64.NO_WRAP)
-    }
-
-    private fun decrypt(ciphertext: String): String {
-        if (ciphertext.isBlank()) return ""
-        return try {
-            val decoded = Base64.decode(ciphertext, Base64.NO_WRAP)
-            String(aead.decrypt(decoded, null), Charsets.UTF_8)
-        } catch (_: Exception) {
-            ""
-        }
-    }
-
-    private val protocol = androidx.datastore.preferences.core.intPreferencesKey("pairing_protocol")
-
-    class Pairing(val token: String, val fingerprint: String, val url: String)
-
-    val pairing: Flow<Pairing?> =
-        context.dataStore.data.map { prefs ->
-            if (prefs[protocol] != 1) return@map null
-            val token = prefs[AUTH_TOKEN]?.let { decrypt(it) }.orEmpty()
-            val fingerprint = prefs[CERT_FINGERPRINT]?.let { decrypt(it) }.orEmpty()
-            val url = prefs[CACHED_SERVER_URL].orEmpty()
-            if (token.isBlank() || fingerprint.isBlank() || url.isBlank()) null
-            else Pairing(token, fingerprint, url)
-        }
-
-    val authToken: Flow<String> =
-        context.dataStore.data.map { prefs ->
-            prefs[AUTH_TOKEN]?.takeIf { prefs[protocol] == 1 }?.let { decrypt(it) } ?: ""
-        }
-
-    val certFingerprint: Flow<String> =
-        context.dataStore.data.map { prefs ->
-            prefs[CERT_FINGERPRINT]?.takeIf { prefs[protocol] == 1 }?.let { decrypt(it) } ?: ""
-        }
-
-    val serviceEnabled: Flow<Boolean> =
-        context.dataStore.data.map { prefs -> prefs[SERVICE_ENABLED] ?: false }
-
-    val isConfigured: Flow<Boolean> = pairing.map { it != null }
-
-    class PendingPair(val url: String, val fingerprint: String, val code: String, val token: String)
-
-    private val pendingPairKey = stringPreferencesKey("pending_pair_completion")
-
-    suspend fun pendingPair(): PendingPair? {
-        val value =
-            context.dataStore.data.first()[pendingPairKey]?.let { decrypt(it) } ?: return null
-        val parts = value.split(' ')
-        if (parts.size != 4) return null
-        return PendingPair(parts[0], parts[1], parts[2], parts[3])
-    }
-
-    suspend fun savePendingPair(pair: PendingPair?) {
-        context.dataStore.edit { prefs ->
-            if (pair == null) prefs.remove(pendingPairKey)
-            else
-                prefs[pendingPairKey] =
-                    encrypt(
-                        listOf(pair.url, pair.fingerprint, pair.code, pair.token).joinToString(" "),
-                    )
-        }
-    }
-
-    suspend fun setServerConfig(token: String, fingerprint: String, url: String) {
-        context.dataStore.edit { prefs ->
-            if (prefs[AUTH_TOKEN]?.let { decrypt(it) } != token) prefs[SERVICE_ENABLED] = true
-            prefs[AUTH_TOKEN] = encrypt(token)
-            prefs[CERT_FINGERPRINT] = encrypt(fingerprint)
-            prefs[CACHED_SERVER_URL] = url
-            prefs[protocol] = 1
-            prefs.remove(pendingPairKey)
-        }
-    }
-
-    suspend fun clearPairingIfCurrent(token: String) {
-        context.dataStore.edit { prefs ->
-            if (prefs[AUTH_TOKEN]?.let { decrypt(it) } == token) {
-                prefs.remove(AUTH_TOKEN)
-                prefs.remove(CERT_FINGERPRINT)
-                prefs.remove(CACHED_SERVER_URL)
-                prefs.remove(protocol)
-            }
-        }
-    }
-
-    suspend fun setCachedServerUrl(url: String, token: String) {
-        context.dataStore.edit { prefs ->
-            if (prefs[AUTH_TOKEN]?.let { decrypt(it) } == token) prefs[CACHED_SERVER_URL] = url
-        }
-    }
-
-    suspend fun setServiceEnabled(enabled: Boolean) {
-        context.dataStore.edit { prefs -> prefs[SERVICE_ENABLED] = enabled }
     }
 
     val knownApps: Flow<Set<String>> =

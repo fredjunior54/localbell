@@ -4,11 +4,7 @@ import android.annotation.SuppressLint
 import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
-import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
-import okhttp3.OkHttpClient
 
 object CryptoUtils {
     fun calculateFingerprint(cert: X509Certificate): String {
@@ -49,38 +45,5 @@ object CryptoUtils {
 
             override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
         }
-    }
-
-    /**
-     * Creates an OkHttpClient configured with certificate pinning. Verifies server certificate
-     * fingerprint instead of relying on CA chain.
-     */
-    fun createPinnedOkHttpClient(
-        fingerprint: String,
-        connectTimeoutMs: Long = 10_000,
-        readTimeoutMs: Long = 10_000,
-        writeTimeoutMs: Long = 10_000,
-    ): OkHttpClient {
-        val trustManager = createPinningTrustManager(fingerprint)
-        val sslContext =
-            SSLContext.getInstance("TLS").apply {
-                init(null, arrayOf<TrustManager>(trustManager), null)
-            }
-
-        return OkHttpClient.Builder()
-            .sslSocketFactory(sslContext.socketFactory, trustManager)
-            .hostnameVerifier { _, _ -> true } // We verify via fingerprint instead
-            .addInterceptor { chain ->
-                if (!chain.request().url.isHttps) throw java.io.IOException("HTTPS is required")
-                chain.proceed(chain.request())
-            }
-            .dns(LanEndpoint.dns)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .proxy(java.net.Proxy.NO_PROXY)
-            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .writeTimeout(writeTimeoutMs, TimeUnit.MILLISECONDS)
-            .build()
     }
 }

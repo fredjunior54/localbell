@@ -7,11 +7,7 @@ import android.os.Build
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.core.content.ContextCompat
 
-/**
- * Android 17 blocks local network traffic (mDNS discovery and the server connection) for apps
- * targeting API 37 until ACCESS_LOCAL_NETWORK is granted. Without it, every discovery also makes
- * Android show a device picker, even while the app is in the background.
- */
+/** Android 17 requires local network permission before the desktop can reach the listener. */
 object LocalNetworkPermission {
     @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.CINNAMON_BUN)
     fun isMissing(context: Context): Boolean =
