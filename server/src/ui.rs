@@ -26,6 +26,7 @@ const SECTION_GAP: f32 = 16.0;
 const INSET: i8 = 16;
 const ACTION_HEIGHT: f32 = 32.0;
 const SETTINGS_ICON: char = '\u{f013}';
+const CANCEL_ICON: char = '\u{f00d}';
 const TRASH_ICON: char = '\u{f014}';
 const PHONE_ICON: char = '\u{f10b}';
 const PAIR_ICON: char = '\u{f023}';
@@ -144,6 +145,11 @@ impl eframe::App for App {
         ctx.request_repaint_after(Duration::from_millis(150));
         let close = ctx.input(|i| i.viewport().close_requested());
         if close {
+            let mut status = self.phone.status.lock().unwrap();
+            if let Some(response) = status.approval.take() {
+                status.comparison = None;
+                let _ = response.send(false);
+            }
             self.window.visible.store(false, Ordering::Relaxed);
         }
         if !close
@@ -171,10 +177,54 @@ impl eframe::App for App {
                     self.phone_controls(ui);
                 });
             });
+        self.pairing_dialog(ui.ctx());
     }
 }
 
 impl App {
+    fn pairing_dialog(&self, ctx: &egui::Context) {
+        let mut status = self.phone.status.lock().unwrap();
+        let Some(number) = status
+            .comparison
+            .as_ref()
+            .filter(|_| status.approval.is_some())
+        else {
+            return;
+        };
+        let modal = egui::Modal::new(egui::Id::new("pairing-confirmation")).show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                section(ui, PAIR_ICON, "Confirm pairing");
+                ui.add_space(GAP);
+                ui.label(
+                    egui::RichText::new(number)
+                        .size(24.0)
+                        .strong()
+                        .color(Color32::from_rgb(166, 227, 161)),
+                );
+                ui.add_space(GAP);
+            });
+            ui.horizontal(|ui| {
+                if action(ui, PAIR_ICON, "Yes", MAUVE, true).clicked() {
+                    return Some(true);
+                }
+                if action(ui, CANCEL_ICON, "No", TEXT, true).clicked() {
+                    return Some(false);
+                }
+                None
+            })
+            .inner
+        });
+        if let Some(approved) = modal
+            .inner
+            .or_else(|| modal.should_close().then_some(false))
+        {
+            status.comparison = None;
+            if let Some(response) = status.approval.take() {
+                let _ = response.send(approved);
+            }
+        }
+    }
+
     fn phone_controls(&mut self, ui: &mut egui::Ui) {
         let phone = &self.phone;
         let (message, busy, saved) = {
@@ -206,16 +256,16 @@ impl App {
                     .err()
                     .map_or_else(String::new, |error| error.to_string());
             }
-            let mut status = phone.status.lock().unwrap();
-            if let Some((number, _)) = &status.comparison {
-                ui.label(format!("Compare this number with the phone: {number}"));
-                let accept = action(ui, PAIR_ICON, "Numbers Match", MAUVE, true).clicked();
-                let decline = action(ui, SETTINGS_ICON, "Cancel", RED, true).clicked();
-                if (accept || decline)
-                    && let Some((_, response)) = status.comparison.take()
-                {
-                    let _ = response.send(accept);
-                }
+            let waiting = {
+                let status = phone.status.lock().unwrap();
+                status
+                    .comparison
+                    .clone()
+                    .filter(|_| status.approval.is_none() && !status.saved)
+            };
+            if let Some(number) = waiting {
+                ui.label(egui::RichText::new(number).size(24.0).strong());
+                ui.label("Waiting for phone confirmation…");
             }
             if !self.phone_error.is_empty() {
                 ui.colored_label(RED, &self.phone_error);
@@ -253,6 +303,9 @@ pub fn run(phone: Arc<Controller>) -> Result<()> {
             break;
         }
         while !window.visible.load(Ordering::Relaxed) && !window.quit.load(Ordering::Relaxed) {
+            if phone.status.lock().unwrap().approval.is_some() {
+                window.visible.store(true, Ordering::Relaxed);
+            }
             std::thread::sleep(Duration::from_millis(100));
         }
         if window.quit.load(Ordering::Relaxed) {

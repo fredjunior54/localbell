@@ -21,8 +21,8 @@ async fn exchange() -> Result<()> {
         [1; 32],
         |value| {
             comparison = Some(value);
-            std::future::ready(true)
         },
+        || std::future::ready(true),
         |value| {
             credential = Some(value.clone());
             Ok(())

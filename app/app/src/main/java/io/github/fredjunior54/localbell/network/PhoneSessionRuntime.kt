@@ -38,6 +38,8 @@ internal class PhoneSessionRuntime(
         val phase: Phase = Phase.STOPPED,
         val paired: Boolean = false,
         val comparison: String? = null,
+        val comparisonId: Long = 0,
+        val approvalDeadline: Long? = null,
         val address: String? = null,
         val forwarded: Long = 0,
         val accepted: Boolean? = null,
@@ -54,9 +56,24 @@ internal class PhoneSessionRuntime(
     private var socket: Socket? = null
     private var decision: CompletableDeferred<Boolean>? = null
     private var delivery: SessionDelivery? = null
+    private var comparisonId = 0L
     private var lastEnrollment: Long? = null
 
-    fun approve(matches: Boolean) = synchronized(lock) { decision?.complete(matches) }
+    fun approve(matches: Boolean, attempt: Long = status.value.comparisonId) =
+        synchronized(lock) {
+            val current = mutableStatus.value
+            if (current.comparison == null || current.comparisonId != attempt) return@synchronized
+            if (current.approvalDeadline != null) {
+                if (!matches) {
+                    mutableStatus.update { it.copy(comparison = null, approvalDeadline = null) }
+                    runCatching { socket?.close() }
+                }
+            } else if (decision?.complete(matches) == true && matches) {
+                mutableStatus.update {
+                    it.copy(approvalDeadline = SystemClock.elapsedRealtime() + FINAL_APPROVAL_MS)
+                }
+            }
+        }
 
     fun offer(kind: SessionDelivery.Kind, key: String, payload: JSONObject? = null) =
         synchronized(lock) {
@@ -103,7 +120,12 @@ internal class PhoneSessionRuntime(
         while (synchronized(lock) { !closed }) {
             try {
                 mutableStatus.update {
-                    it.copy(phase = Phase.LISTENING, comparison = null, address = null)
+                    it.copy(
+                        phase = Phase.LISTENING,
+                        comparison = null,
+                        approvalDeadline = null,
+                        address = null,
+                    )
                 }
                 server.accept().use { connection ->
                     synchronized(lock) {
@@ -118,6 +140,7 @@ internal class PhoneSessionRuntime(
                 kotlinx.coroutines.delay(REJECT_DELAY_MS)
             } finally {
                 synchronized(lock) {
+                    mutableStatus.update { it.copy(comparison = null, approvalDeadline = null) }
                     decision?.cancel()
                     decision = null
                     delivery = null
@@ -140,15 +163,50 @@ internal class PhoneSessionRuntime(
                 ENROLLMENT_TIMEOUT_SECONDS,
                 TimeUnit.SECONDS,
             )
+        var approvalGuard: java.util.concurrent.ScheduledFuture<*>? = null
         try {
             val digest = synchronized(lock) { readCredential() }
             val opened =
-                peer.open(leaf, digest, { number -> awaitDecision(connection, number) }) { value ->
+                peer.open(
+                    leaf,
+                    digest,
+                    { number ->
+                        if (!guard.cancel(false) || !awaitDecision(connection, number)) false
+                        else
+                            synchronized(lock) {
+                                val deadline =
+                                    mutableStatus.value.approvalDeadline
+                                        ?: return@synchronized false
+                                val remaining = deadline - SystemClock.elapsedRealtime()
+                                if (remaining <= 0 || connection.isClosed) false
+                                else {
+                                    connection.soTimeout = remaining.toInt()
+                                    approvalGuard =
+                                        deadlines.schedule(
+                                            { runCatching { connection.close() } },
+                                            remaining,
+                                            TimeUnit.MILLISECONDS,
+                                        )
+                                    true
+                                }
+                            }
+                    },
+                ) { value ->
                     synchronized(lock) {
-                        if (closed || connection.isClosed || readCredential() != null) false
+                        val deadline =
+                            mutableStatus.value.approvalDeadline ?: return@synchronized false
+                        if (
+                            closed ||
+                                connection.isClosed ||
+                                SystemClock.elapsedRealtime() >= deadline ||
+                                readCredential() != null
+                        )
+                            false
                         else {
                             saveCredential(value)
-                            mutableStatus.update { it.copy(paired = true, comparison = null) }
+                            mutableStatus.update {
+                                it.copy(paired = true, comparison = null, approvalDeadline = null)
+                            }
                             true
                         }
                     }
@@ -158,6 +216,7 @@ internal class PhoneSessionRuntime(
             if (!guard.cancel(false)) return
             serve(connection, peer, ready)
         } finally {
+            approvalGuard?.cancel(false)
             guard.cancel(false)
         }
     }
@@ -181,6 +240,7 @@ internal class PhoneSessionRuntime(
                             Status(
                                 Phase.PAIRING,
                                 comparison = number,
+                                comparisonId = ++comparisonId,
                                 address = connection.inetAddress.hostAddress,
                             )
                     }
@@ -234,7 +294,12 @@ internal class PhoneSessionRuntime(
             runCatching { socket?.close() }
             listener?.close()
             mutableStatus.update {
-                it.copy(phase = Phase.STOPPED, comparison = null, address = null)
+                it.copy(
+                    phase = Phase.STOPPED,
+                    comparison = null,
+                    approvalDeadline = null,
+                    address = null,
+                )
             }
         }
 
@@ -264,7 +329,8 @@ internal class PhoneSessionRuntime(
     companion object {
         private const val DIGEST_BYTES = 32
         private const val REJECT_DELAY_MS = 1_000L
-        private const val APPROVAL_MS = 110_000L
+        private const val APPROVAL_MS = 80_000L
+        internal const val FINAL_APPROVAL_MS = 30_000L
         private const val ENROLLMENT_TIMEOUT_SECONDS = 120L
     }
 }

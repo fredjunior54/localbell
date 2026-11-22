@@ -222,7 +222,7 @@ mod tests {
                 }
             };
             let mut saved = None;
-            session_client::pair(&mut socket, leaf, |number| std::future::ready(number.len() == 6), |credential| {
+            session_client::pair(&mut socket, leaf, |number| assert_eq!(number.len(), 6), || async { tokio::time::sleep(Duration::from_secs(6)).await; true }, |credential| {
                 saved = Some(credential.clone());
                 Ok(())
             }).await?;

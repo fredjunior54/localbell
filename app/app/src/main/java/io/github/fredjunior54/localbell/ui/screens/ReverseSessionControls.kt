@@ -3,6 +3,7 @@ package io.github.fredjunior54.localbell.ui.screens
 import android.Manifest
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -51,6 +53,7 @@ import io.github.fredjunior54.localbell.ui.theme.ListenerStatusColors
 import io.github.fredjunior54.localbell.ui.theme.spacing
 import io.github.fredjunior54.localbell.util.LocalNetworkPermission
 import java.util.UUID
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun ReverseSessionControls() {
@@ -96,21 +99,9 @@ internal fun ReverseSessionControls() {
             } else start(value)
         }
     status.comparison?.let { number ->
-        AlertDialog(
-            onDismissRequest = { runtime?.approve(false) },
-            title = { Text(stringResource(R.string.listener_compare_title)) },
-            text = { Text(stringResource(R.string.listener_compare_number, number)) },
-            confirmButton = {
-                TextButton(onClick = { runtime?.approve(true) }) {
-                    Text(stringResource(R.string.pairing_match))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { runtime?.approve(false) }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
+        PairingApprovalDialog(number, status.approvalDeadline) { matches ->
+            runtime?.approve(matches, status.comparisonId)
+        }
     }
     if (showUnpair) {
         AlertDialog(
@@ -184,6 +175,75 @@ private fun ListenerPortDialog(port: Int, dismiss: () -> Unit, save: (Int) -> Un
         dismissButton = {
             TextButton(onClick = dismiss) { Text(stringResource(android.R.string.cancel)) }
         },
+    )
+}
+
+@Composable
+internal fun PairingApprovalDialog(number: String, deadline: Long?, decide: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { decide(false) },
+        title = { Text(stringResource(R.string.listener_compare_title)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    number,
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (deadline == null) {
+                    Text(stringResource(R.string.listener_compare_instructions))
+                } else {
+                    Text(stringResource(R.string.listener_waiting_approval))
+                    PairingCountdown(deadline)
+                }
+            }
+        },
+        confirmButton = {
+            if (deadline == null) {
+                TextButton(onClick = { decide(true) }) {
+                    Text(stringResource(R.string.pairing_match))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { decide(false) }) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        },
+    )
+}
+
+internal fun approvalTimeRemaining(deadline: Long, now: Long): Long =
+    (deadline - now).coerceIn(0, PhoneSessionRuntime.FINAL_APPROVAL_MS)
+
+@Composable
+private fun PairingCountdown(deadline: Long) {
+    var remaining by
+        remember(deadline) {
+            mutableStateOf(approvalTimeRemaining(deadline, SystemClock.elapsedRealtime()))
+        }
+    LaunchedEffect(deadline) {
+        while (remaining > 0) {
+            delay(minOf(remaining, 100L))
+            remaining = approvalTimeRemaining(deadline, SystemClock.elapsedRealtime())
+        }
+    }
+    LinearProgressIndicator(
+        progress = { remaining.toFloat() / PhoneSessionRuntime.FINAL_APPROVAL_MS },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    val seconds = ((remaining + 999L) / 1000L).toInt()
+    Text(
+        androidx.compose.ui.res.pluralStringResource(
+            R.plurals.listener_approval_seconds,
+            seconds,
+            seconds,
+        ),
+        style = MaterialTheme.typography.bodySmall,
     )
 }
 

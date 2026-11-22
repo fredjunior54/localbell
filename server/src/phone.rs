@@ -35,7 +35,8 @@ enum Request {
 #[derive(Default)]
 pub struct Status {
     pub message: &'static str,
-    pub comparison: Option<(String, oneshot::Sender<bool>)>,
+    pub comparison: Option<String>,
+    pub approval: Option<oneshot::Sender<bool>>,
     pub saved: bool,
     pub busy: bool,
 }
@@ -111,6 +112,7 @@ impl Controller {
         }
         status.saved = false;
         status.comparison = None;
+        status.approval = None;
         self.tx.send_replace(Request::Idle);
         Ok(())
     }
@@ -126,6 +128,7 @@ async fn run(
         {
             let mut view = status.lock().unwrap();
             view.comparison = None;
+            view.approval = None;
             view.busy = !matches!(request, Request::Idle);
         }
         tokio::select! {
@@ -137,6 +140,7 @@ async fn run(
             () = process(request, &status, &path) => {
                 let mut view = status.lock().unwrap();
                 view.comparison = None;
+                view.approval = None;
                 view.busy = false;
             }
         }
@@ -221,9 +225,10 @@ async fn enroll(mut settings: Settings, status: &Mutex<Status>, path: &Path) -> 
     let result = session_client::pair(
         &mut socket,
         leaf,
-        |number| {
+        |number| status.lock().unwrap().comparison = Some(number),
+        || {
             let (tx, rx) = oneshot::channel();
-            status.lock().unwrap().comparison = Some((number, tx));
+            status.lock().unwrap().approval = Some(tx);
             async move { rx.await.unwrap_or(false) }
         },
         |credential| {

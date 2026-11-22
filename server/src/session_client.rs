@@ -7,7 +7,8 @@ use std::{future::Future, time::Duration};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
-const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
+const PHONE_APPROVAL_TIMEOUT: Duration = Duration::from_secs(90);
+const DESKTOP_APPROVAL_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Credential {
@@ -65,12 +66,13 @@ pub enum Disconnect {
 pub async fn pair<S, Approve, Decision, Save>(
     stream: &mut S,
     leaf: [u8; 32],
+    show_comparison: impl FnOnce(String),
     approve: Approve,
     save: Save,
 ) -> Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
-    Approve: FnOnce(String) -> Decision,
+    Approve: FnOnce() -> Decision,
     Decision: Future<Output = bool>,
     Save: FnOnce(&Credential) -> Result<()>,
 {
@@ -97,23 +99,23 @@ where
     )
     .await?;
     let comparison = session_pairing::comparison(&leaf, &code, &nonce, &challenge);
-    tokio::time::timeout(APPROVAL_TIMEOUT, async {
-        tokio::try_join!(
-            async {
-                ensure!(approve(comparison).await, "Desktop declined enrollment");
-                Ok(())
-            },
-            async {
-                ensure!(
-                    matches!(
-                        receive(stream, APPROVAL_TIMEOUT).await?,
-                        Some(PhoneMessage::PairApproved)
-                    ),
-                    "Phone declined enrollment"
-                );
-                Ok(())
-            },
-        )?;
+    show_comparison(comparison);
+    ensure!(
+        matches!(
+            receive(stream, PHONE_APPROVAL_TIMEOUT).await?,
+            Some(PhoneMessage::PairApproved)
+        ),
+        "Phone declined enrollment"
+    );
+    tokio::time::timeout(DESKTOP_APPROVAL_TIMEOUT, async {
+        tokio::select! {
+            biased;
+            incoming = receive::<PhoneMessage>(stream, DESKTOP_APPROVAL_TIMEOUT) => {
+                incoming?;
+                anyhow::bail!("Phone ended enrollment");
+            }
+            accepted = approve() => ensure!(accepted, "Desktop declined enrollment"),
+        }
         Ok::<_, anyhow::Error>(())
     })
     .await
@@ -258,6 +260,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn final_confirmation_is_not_offered_before_phone_approval() -> Result<()> {
+        use std::cell::Cell;
+        for phone_accepts in [false, true] {
+            let (mut desktop, mut remote) = tokio::io::duplex(2048);
+            let shown = Cell::new(false);
+            let offered = Cell::new(false);
+            let attempted = pair(
+                &mut desktop,
+                [1; 32],
+                |_| shown.set(true),
+                || {
+                    offered.set(true);
+                    std::future::ready(false)
+                },
+                |_| panic!("A rejected pairing must not persist"),
+            );
+            let remote = async {
+                let _: Option<DesktopMessage> = receive(&mut remote, IO_TIMEOUT).await?;
+                phone(
+                    &mut remote,
+                    PhoneMessage::PairNonce {
+                        nonce: hex::encode([2; 32]),
+                    },
+                )
+                .await?;
+                let _: Option<DesktopMessage> = receive(&mut remote, IO_TIMEOUT).await?;
+                tokio::task::yield_now().await;
+                assert!(shown.get());
+                assert!(!offered.get());
+                phone(
+                    &mut remote,
+                    if phone_accepts {
+                        PhoneMessage::PairApproved
+                    } else {
+                        PhoneMessage::Rejected
+                    },
+                )
+                .await?;
+                // Keep the stream open until the local decision has been processed.
+                let frame = receive::<DesktopMessage>(&mut remote, Duration::from_millis(10)).await;
+                assert!(frame.is_err());
+                Ok::<_, anyhow::Error>(())
+            };
+            let (result, remote) = tokio::join!(attempted, remote);
+            remote?;
+            assert!(result.is_err());
+            assert_eq!(offered.get(), phone_accepts);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn enrolls_then_authenticates_and_acknowledges() -> Result<()> {
         let (mut desktop, mut phone_stream) = tokio::io::duplex(2048);
         let leaf = [1; 32];
@@ -297,7 +351,8 @@ mod tests {
         let enroll_desktop = pair(
             &mut desktop,
             leaf,
-            |number| async move { number.len() == 6 },
+            |number| assert_eq!(number.len(), 6),
+            || async { true },
             |credential| {
                 saved = Some(credential.clone());
                 Ok(())

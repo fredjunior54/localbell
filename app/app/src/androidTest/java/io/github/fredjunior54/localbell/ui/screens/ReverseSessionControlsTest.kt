@@ -58,6 +58,9 @@ class ReverseSessionControlsTest {
             try {
                 awaitText("Numbers match")
                 compose.onNodeWithText("Numbers match").performClick()
+                awaitText("Waiting for desktop approval…")
+                compose.onNodeWithText("Numbers match").assertDoesNotExist()
+                awaitText("seconds remaining", substring = true)
                 awaitText("Ready to forward")
                 compose.onNodeWithText("Send Test Notification").performScrollTo().performClick()
                 awaitText("Last result: Accepted", substring = true)

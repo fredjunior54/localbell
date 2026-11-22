@@ -92,6 +92,29 @@ class SessionRuntimeTest {
                 peer.send("authenticate", "token" to token)
                 peer.expect("rejected")
             }
+            delay(1_100)
+            tls.connect(address, port).use { socket ->
+                val peer = peer(socket)
+                beginEnrollment(peer, runtime, leaf)
+                runtime.approve(true)
+                peer.expect("pair_approved")
+                val deadline = runtime.status.value.approvalDeadline
+                runtime.approve(true)
+                assertEquals(deadline, runtime.status.value.approvalDeadline)
+                runtime.approve(false)
+                assertFalse(credential.exists())
+            }
+            delay(1_100)
+            tls.connect(address, port).use { socket ->
+                val peer = peer(socket)
+                beginEnrollment(peer, runtime, leaf)
+                runtime.approve(true)
+                peer.expect("pair_approved")
+                withTimeout(35_000) {
+                    runtime.status.first { it.phase == PhoneSessionRuntime.Phase.LISTENING }
+                }
+                assertFalse(credential.exists())
+            }
         } finally {
             runtime.close()
             withTimeout(10_000) { worker.join() }
@@ -106,6 +129,18 @@ class SessionRuntimeTest {
         leaf: ByteArray,
         token: String,
     ) {
+        beginEnrollment(peer, runtime, leaf)
+        runtime.approve(true)
+        peer.expect("pair_approved")
+        peer.send("pair_finish", "token" to token)
+        peer.expect("paired")
+    }
+
+    private suspend fun beginEnrollment(
+        peer: SessionPeer,
+        runtime: PhoneSessionRuntime,
+        leaf: ByteArray,
+    ) {
         val code = ByteArray(32) { 1 }
         val challenge = ByteArray(32) { 3 }
         val commit = SessionPairing.commitment(leaf, code, challenge)
@@ -117,10 +152,6 @@ class SessionRuntimeTest {
                 runtime.status.first { it.phase == PhoneSessionRuntime.Phase.PAIRING }
             }
         assertEquals(SessionPairing.comparison(leaf, code, nonce, challenge), status.comparison)
-        runtime.approve(true)
-        peer.expect("pair_approved")
-        peer.send("pair_finish", "token" to token)
-        peer.expect("paired")
     }
 
     private suspend fun verifyDelivery(

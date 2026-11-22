@@ -4,7 +4,12 @@
     <string name="listener_start">Start listening</string>
     <string name="listener_status_title">Status</string>
     <string name="listener_compare_title">Compare pairing code</string>
-    <string name="listener_compare_number">Confirm only if your desktop shows the same code: %1$s</string>
+    <string name="listener_compare_instructions">Confirm only if your desktop shows the same code.</string>
+    <string name="listener_waiting_approval">Waiting for desktop approval…</string>
+    <plurals name="listener_approval_seconds">
+        <item quantity="one">%d second remaining</item>
+        <item quantity="other">%d seconds remaining</item>
+    </plurals>
     <string name="listener_unpair">Unpair desktop?</string>
     <string name="listener_unpair_confirmation">This desktop will no longer receive notifications. Pair it again to resume.</string>
     <string name="listener_unpair_action">Unpair</string>

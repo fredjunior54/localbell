@@ -17,6 +17,8 @@ Interpret the first four comparison bytes as an unsigned big-endian number, redu
 
 Each session object has integer `v: 1` and string `type`. Enrollment and authenticated delivery use separate TLS connections:
 
+Both displays show the comparison before the phone confirms the match. Linux waits up to 90 seconds for `pair_approved` after displaying the comparison; Android allows up to 80 seconds for its local decision. Once the user confirms on Android, its 30-second final approval window begins. Linux enables **Yes** and **No** only after receiving `pair_approved` and bounds its own decision to 30 seconds. Android rejects finalization after its deadline or after cancellation; the peers do not exchange clock values.
+
 | Step | Desktop → Android | Android → Desktop |
 | --- | --- | --- |
 | Start enrollment | `pair_start` with `code`, `commitment` | `pair_nonce` with `nonce` |
