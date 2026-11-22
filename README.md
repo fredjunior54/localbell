@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.27</strong></p>
+<p align="center"><strong>Version 1.4.28</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -67,20 +67,19 @@ Select **About** for the installed version and maintainer. **Project page** open
 
 #### 📦 Install for your user
 
-If you started LocalBell manually, select **Quit** in the tray before installing so the service can take over. From a LocalBell source checkout, build and install without `sudo`:
+If you started LocalBell manually, select **Quit** in the tray before installing so the service can take over. From a LocalBell source checkout, run the installer without `sudo`. It builds the optimized Linux client first (requires Make and Rust with Cargo), then installs it:
 
 ```bash
-make build
 ./install.sh
 ```
 
-To use a downloaded release instead, extract the archive, then pass the binary path to the installer. Run the same command with a newer binary to upgrade:
+To skip compilation, extract a downloaded release archive and pass the binary path to the installer. Run the same command with a newer binary to upgrade:
 
 ```bash
 ./install.sh /path/to/extracted/localbell
 ```
 
-The installer adds `~/.local/bin/localbell`, `~/.local/share/applications/localbell.desktop`, and `localbell.service` under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`. The **LocalBell** launcher opens the window, including when the client is already running in the tray. It does not start a second client.
+The installer uses `packaging/localbell.desktop` and `packaging/localbell-user.service` and adds `~/.local/bin/localbell`, `~/.local/share/applications/localbell.desktop`, and `localbell.service` under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`. The **LocalBell** launcher opens the window, including when the client is already running in the tray. It does not start a second client.
 
 The user service starts LocalBell with `--start-minimized` once the graphical session is active and an up interface has a non-loopback IPv4 address. It stops at logout. The client keeps retrying if the phone is not yet reachable. If the graphical session is not active during installation, the service is enabled for the next supported graphical login. On desktops without systemd graphical session integration, use the launcher or run the standalone binary.
 

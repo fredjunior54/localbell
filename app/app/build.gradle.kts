@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.fredjunior54.localbell"
         minSdk = 34
         targetSdk = 37
-        versionCode = 57
-        versionName = "1.4.27"
+        versionCode = 58
+        versionName = "1.4.28"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
