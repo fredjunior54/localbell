@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.29</strong></p>
+<p align="center"><strong>Version 1.4.30</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -79,7 +79,7 @@ To skip compilation, extract a downloaded release archive and pass the binary pa
 ./install.sh /path/to/extracted/localbell
 ```
 
-The installer uses `packaging/localbell.desktop` and `packaging/localbell-user.service` and adds `~/.local/bin/localbell`, `~/.local/share/applications/localbell.desktop`, and `localbell.service` under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`. The **LocalBell** launcher opens the window, including when the client is already running in the tray. It does not start a second client.
+The installer uses `packaging/localbell.desktop` and `packaging/localbell-user.service` and adds `~/.local/bin/localbell`, `~/.local/share/applications/localbell.desktop`, its icon under `${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/128x128/apps/`, and `localbell.service` under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`. The **LocalBell** launcher opens the window, including when the client is already running in the tray. It does not start a second client.
 
 The user service starts LocalBell with `--start-minimized` once the graphical session is active and an up interface has a non-loopback IPv4 address. It stops at logout. The client keeps retrying if the phone is not yet reachable. If the graphical session is not active during installation, the service is enabled for the next supported graphical login. On desktops without systemd graphical session integration, use the launcher or run the standalone binary.
 

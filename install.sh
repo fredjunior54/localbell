@@ -31,6 +31,7 @@ systemctl --user show-environment >/dev/null || fail 'Cannot reach the systemd u
 
 bin_dir=$HOME/.local/bin
 apps_dir=$HOME/.local/share/applications
+icon=${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/128x128/apps/localbell.png
 unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 unit=$unit_dir/localbell.service
 
@@ -40,6 +41,8 @@ if [[ ! $binary -ef $bin_dir/localbell ]]; then
 else
     status 'ℹ️  The supplied binary is already at the installation path.'
 fi
+step "Install the desktop icon at $icon"
+install -Dm644 -- "$root/server/assets/localbell-icon.png" "$icon"
 step "Install the desktop launcher at $apps_dir/localbell.desktop"
 install -Dm644 -- "$root/packaging/localbell.desktop" "$apps_dir/localbell.desktop"
 step "Install the systemd user service at $unit"

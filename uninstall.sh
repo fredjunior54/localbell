@@ -22,7 +22,8 @@ else
     printf 'ℹ️  No user service file found; skipping service removal.\n'
 fi
 
-for file in "$HOME/.local/bin/localbell" "$HOME/.local/share/applications/localbell.desktop"; do
+icon=${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/128x128/apps/localbell.png
+for file in "$HOME/.local/bin/localbell" "$HOME/.local/share/applications/localbell.desktop" "$icon"; do
     if [[ -e $file || -L $file ]]; then
         step "Remove $file"
         rm -- "$file"
