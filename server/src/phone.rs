@@ -46,13 +46,9 @@ impl Drop for ConnectionStatus<'_> {
     }
 }
 
-fn is_automatic(event: &Event) -> bool {
-    matches!(event, Event::Notification(payload) if payload["key"].as_str().is_some_and(|key| !key.starts_with("localbell-test-")))
-}
-
-fn record_delivery(status: &Mutex<Status>, automatic: bool, accepted: bool) {
+fn record_delivery(status: &Mutex<Status>, notification: bool, accepted: bool) {
     if accepted
-        && automatic
+        && notification
         && let Some(session) = status.lock().unwrap().connected.as_mut()
     {
         session.forwarded = session.forwarded.saturating_add(1);
@@ -331,11 +327,11 @@ async fn connect(
             let delivered = Arc::clone(&delivered);
             async move {
                 let started = tokio::time::Instant::now();
-                let automatic = is_automatic(&event);
+                let notification = matches!(event, Event::Notification(_));
                 let accepted = deliver(&mut *delivered.lock().await, event)
                     .await
                     .unwrap_or(false);
-                record_delivery(status, automatic, accepted);
+                record_delivery(status, notification, accepted);
                 tracing::debug!(
                     accepted,
                     elapsed_ms = started.elapsed().as_millis() as u64,
@@ -390,7 +386,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn counts_only_accepted_automatic_notifications_in_each_session() -> Result<()> {
+    fn counts_only_accepted_notifications_in_each_session() -> Result<()> {
         use serde_json::json;
         let status = Mutex::new(Status::default());
         let endpoint = "192.168.0.2:19420".parse()?;
@@ -410,13 +406,14 @@ mod tests {
                 (&automatic, true),
                 (&automatic, true),
                 (&test, true),
+                (&test, false),
                 (&invalid, false),
                 (&dismissal, true),
                 (&automatic, false),
             ] {
-                record_delivery(&status, is_automatic(event), accepted);
+                record_delivery(&status, matches!(event, Event::Notification(_)), accepted);
             }
-            assert_eq!(status.lock().unwrap().connected.unwrap().forwarded, 2);
+            assert_eq!(status.lock().unwrap().connected.unwrap().forwarded, 3);
             drop(guard);
             assert!(status.lock().unwrap().connected.is_none());
         }

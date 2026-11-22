@@ -173,6 +173,14 @@ class SessionRuntimeTest {
         val request = peer.expect("notification")
         peer.send("ack", "id" to request.getLong("id"), "accepted" to true)
         withTimeout(5_000) { runtime.status.first { it.forwarded == 1L } }
+        for (accepted in listOf(false, true)) {
+            val key = "localbell-test-$accepted"
+            assertTrue(runtime.offer(SessionDelivery.Kind.TEST, key, JSONObject().put("key", key)))
+            val test = peer.expect("notification")
+            peer.send("ack", "id" to test.getLong("id"), "accepted" to accepted)
+            val status = withTimeout(5_000) { runtime.status.first { it.testAccepted == accepted } }
+            assertEquals(if (accepted) 2L else 1L, status.forwarded)
+        }
     }
 
     private fun SSLContext.connect(address: java.net.InetAddress, port: Int) =

@@ -259,7 +259,7 @@ internal class PhoneSessionRuntime(
                             it.copy(
                                 forwarded =
                                     it.forwarded +
-                                        if (kind == SessionDelivery.Kind.AUTOMATIC && accepted) 1
+                                        if (kind != SessionDelivery.Kind.DISMISS && accepted) 1
                                         else 0,
                                 accepted = accepted,
                                 outcomeTime = System.currentTimeMillis(),

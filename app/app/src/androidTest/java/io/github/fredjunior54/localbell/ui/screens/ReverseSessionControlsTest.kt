@@ -65,7 +65,7 @@ class ReverseSessionControlsTest {
                 compose.onNodeWithText("Send Test Notification").performScrollTo().performClick()
                 awaitText("Last result: Accepted", substring = true)
                 compose.onNodeWithText("Test notification delivered.").assertDoesNotExist()
-                assertEmptyForwardingCount()
+                awaitText("1 notification")
             } finally {
                 PhoneSessionService.active?.unpair()
                 context.stopService(Intent(context, PhoneSessionService::class.java))

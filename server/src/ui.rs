@@ -6,6 +6,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
+        mpsc,
     },
     time::Duration,
 };
@@ -61,6 +62,14 @@ fn action(
     color: Color32,
     enabled: bool,
 ) -> egui::Response {
+    ui.add_enabled(
+        enabled,
+        egui::Button::new(action_label(symbol, text, color))
+            .min_size(egui::vec2(0.0, ACTION_HEIGHT)),
+    )
+}
+
+fn action_label(symbol: char, text: &str, color: Color32) -> egui::text::LayoutJob {
     let mut label = egui::text::LayoutJob::default();
     label.append(
         &symbol.to_string(),
@@ -72,10 +81,7 @@ fn action(
         GAP,
         egui::TextFormat::simple(egui::FontId::proportional(TEXT_SIZE), color),
     );
-    ui.add_enabled(
-        enabled,
-        egui::Button::new(label).min_size(egui::vec2(0.0, ACTION_HEIGHT)),
-    )
+    label
 }
 
 fn surface(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
@@ -94,6 +100,44 @@ struct Window {
     visible: AtomicBool,
     quit: AtomicBool,
 }
+const INSTANCE_INTERFACE: &str = "io.github.fredjunior54.LocalBell";
+const INSTANCE_PATH: &str = "/io/github/fredjunior54/LocalBell";
+
+struct Instance(Arc<Window>);
+
+#[zbus::interface(name = "io.github.fredjunior54.LocalBell")]
+impl Instance {
+    fn show_window(&self) {
+        self.0.visible.store(true, Ordering::Relaxed);
+    }
+}
+
+pub async fn show_running_window() -> Result<()> {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        let connection = zbus::Connection::session().await?;
+        connection
+            .call_method(
+                Some(INSTANCE_INTERFACE),
+                INSTANCE_PATH,
+                Some(INSTANCE_INTERFACE),
+                "ShowWindow",
+                &(),
+            )
+            .await?;
+        Ok::<(), zbus::Error>(())
+    })
+    .await??;
+    Ok(())
+}
+
+async fn register_instance(window: Arc<Window>) -> zbus::Result<zbus::Connection> {
+    zbus::connection::Builder::session()?
+        .serve_at(INSTANCE_PATH, Instance(window))?
+        .name(INSTANCE_INTERFACE)?
+        .build()
+        .await
+}
+
 struct Tray {
     window: Arc<Window>,
     icon: ksni::Icon,
@@ -147,6 +191,8 @@ struct App {
     phone_error: String,
     about_open: bool,
     about_artwork: Option<egui::TextureHandle>,
+    project_open: Option<mpsc::Receiver<Result<()>>>,
+    project_error: bool,
 }
 
 impl eframe::App for App {
@@ -209,10 +255,29 @@ impl eframe::App for App {
 
 impl App {
     fn about_dialog(&mut self, ctx: &egui::Context) {
+        if let Some(pending) = &self.project_open {
+            match pending.try_recv() {
+                Ok(result) => {
+                    self.project_error = result.is_err();
+                    if let Err(error) = result {
+                        tracing::warn!(%error, "Could not open the LocalBell project page");
+                    }
+                    self.project_open = None;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.project_open = None;
+                    self.project_error = true;
+                }
+                Err(mpsc::TryRecvError::Empty) => (),
+            }
+        }
         let artwork = &mut self.about_artwork;
-        let modal = egui::Modal::new(egui::Id::new("about-localbell")).show(ctx, |ui| {
+        let frame =
+            egui::Frame::popup(&ctx.style_of(ctx.theme())).inner_margin(egui::Margin::same(INSET));
+        let modal = egui::Modal::new(egui::Id::new("about-localbell")).frame(frame).show(ctx, |ui| {
             let available = ctx.content_rect().size();
-            ui.set_max_width((available.x - 2.0 * SECTION_GAP).clamp(1.0, 360.0));
+            let width = (available.x - 2.0 * (SECTION_GAP + f32::from(INSET))).clamp(1.0, 360.0);
+            ui.set_width(width);
             section(ui, INFO_ICON, "About LocalBell");
             ui.add_space(GAP);
             egui::ScrollArea::vertical()
@@ -240,20 +305,44 @@ impl App {
                             ui.image((artwork.id(), egui::vec2(width, width * size.y / size.x)))
                         });
                     }
-                    ui.label(
-                        "Forward notifications from your Android phone to your Linux desktop.",
-                    );
-                    ui.label(concat!("Version ", env!("CARGO_PKG_VERSION")));
-                    ui.label("Maintained by Fred Junior");
+                    ui.add_space(GAP);
+                    ui.vertical_centered(|ui| {
+                        ui.label("Forward notifications from your Android phone to your Linux desktop.");
+                        ui.label(concat!("Version ", env!("CARGO_PKG_VERSION")));
+                        ui.label("Maintained by Fred Junior");
+                    });
+                    if self.project_error {
+                        ui.vertical_centered(|ui| {
+                            ui.colored_label(RED, "Could not open the default browser.");
+                        });
+                    }
                 });
-            ui.add_space(GAP);
-            ui.horizontal_wrapped(|ui| {
-                if action(ui, NETWORK_ICON, "Project page", MAUVE, true).clicked() {
-                    ctx.open_url(egui::OpenUrl::new_tab(PROJECT_PAGE));
+            ui.add_space(SECTION_GAP);
+            let labels = [(NETWORK_ICON, "Project page", MAUVE), (CANCEL_ICON, "Close", TEXT)];
+            let buttons_width = ui.fonts_mut(|fonts| {
+                labels.iter().map(|&(icon, text, color)| fonts.layout_job(action_label(icon, text, color)).size().x).sum::<f32>()
+            }) + 4.0 * ui.spacing().button_padding.x + ui.spacing().item_spacing.x;
+            let mut buttons = |ui: &mut egui::Ui| {
+                if action(ui, NETWORK_ICON, "Project page", MAUVE, self.project_open.is_none()).clicked() {
+                    self.project_error = false;
+                    let (sender, receiver) = mpsc::channel();
+                    self.project_open = Some(receiver);
+                    std::thread::spawn(move || {
+                        let result = std::process::Command::new("xdg-open").arg(PROJECT_PAGE).status()
+                            .map_err(anyhow::Error::from)
+                            .and_then(|status| if status.success() { Ok(()) } else { anyhow::bail!("xdg-open exited with {status}") });
+                        let _ = sender.send(result);
+                    });
                 }
                 action(ui, CANCEL_ICON, "Close", TEXT, true).clicked()
-            })
-            .inner
+            };
+            ui.vertical_centered(|ui| {
+                if buttons_width <= ui.available_width() {
+                    ui.allocate_ui_with_layout(egui::vec2(buttons_width.ceil(), ACTION_HEIGHT), egui::Layout::left_to_right(egui::Align::Center), buttons).inner
+                } else {
+                    buttons(ui)
+                }
+            }).inner
         });
         self.about_open = !(modal.inner || modal.should_close());
     }
@@ -403,9 +492,18 @@ fn detail_icon(ui: &mut egui::Ui, glyph: char, color: Color32) {
     );
 }
 
-pub fn run(phone: Arc<Controller>, start_minimized: bool) -> Result<()> {
+pub fn run(
+    phone: Arc<Controller>,
+    start_minimized: bool,
+    runtime: &tokio::runtime::Runtime,
+) -> Result<()> {
     let window = Arc::new(Window::default());
     window.visible.store(!start_minimized, Ordering::Relaxed);
+    let _instance = runtime
+        .block_on(register_instance(Arc::clone(&window)))
+        .inspect_err(|error| {
+            tracing::debug!(%error, "Could not register the LocalBell window activation service");
+        });
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/localbell-icon.png"))?;
     let tray_icon = ksni::Icon {
         width: icon.width as i32,
@@ -529,6 +627,8 @@ fn open_window(window: Arc<Window>, icon: egui::IconData, phone: Arc<Controller>
                 phone_error: String::new(),
                 about_open: false,
                 about_artwork: None,
+                project_open: None,
+                project_error: false,
                 phone,
             }))
         }),

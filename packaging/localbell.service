@@ -6,7 +6,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/localbell
+ExecStart=/usr/bin/localbell --start-minimized
 Restart=on-failure
 RestartSec=5
 

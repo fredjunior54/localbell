@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=LocalBell
+Comment=Receive Android notifications on your Linux desktop
+Exec=sh -c "exec \\"\\$HOME/.local/bin/localbell\\""
+Terminal=false
+Categories=Utility;

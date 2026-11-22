@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.24</strong></p>
+<p align="center"><strong>Version 1.4.25</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -27,7 +27,7 @@ Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a
 ## 🔔 How it works
 
 1. Open LocalBell on Android. In **Listener settings**, check the port (default `19420`) and tap **Start listening** if needed. Allow local network access if prompted on Android 17 or later.
-2. On Linux, enter the phone's IPv4 address or hostname and port under **Phone Configuration**, then select **Pair**. Compare the six-digit number and confirm on both devices.
+2. On Linux, enter the phone's IPv4 address or hostname and port under **Phone Configuration**, then select **Pair**. Compare the six-digit numbers. Tap **Numbers match** on Android, then approve on Linux.
 3. Grant **Notification Access** on Android to forward eligible alerts automatically. Use **Send Test Notification** and check **Status** to verify delivery.
 
 Linux initiates and maintains an encrypted session; Android makes no delivery attempts while disconnected. Both apps must be updated together when moving from the old HTTPS setup. Pair once again; app filters stay unchanged. See the [setup guide](docs/getting-started.md#connect-over-tailscale) for Tailscale.
@@ -37,7 +37,7 @@ Linux initiates and maintains an encrypted session; Android makes no delivery at
 - **Pair by address:** Enter the phone’s IP or hostname, compare a six-digit number, and approve. No QR scan or code entry.
 - **Encrypted, direct delivery:** Notifications travel over certificate-pinned TLS on your LAN or Tailscale network. No account or cloud relay.
 - **Native Linux notifications:** Get alerts through your desktop’s D-Bus notification service. Dismissing an alert on your phone also dismisses it on Linux.
-- **Test delivery:** Send a sample to a ready desktop without granting notification access.
+- **Test delivery:** Send a sample to a ready desktop without granting notification access. Both counters include successful automatic and test deliveries, exclude failures and dismissals, and reset on reconnect. Linux shows its **Status** card only while authenticated.
 - **Android app artwork:** Compatible Linux notification daemons can display the source app icon without a cloud lookup. Linux sends it directly over the session D-Bus.
 - **Per-app filters:** Choose which Android apps can forward notifications.
 
@@ -58,6 +58,35 @@ Use `./localbell --start-minimized` to start in the system tray without opening 
 
 Configure the phone address and port in the desktop window. Click the tray icon to show or hide the window. Closing the window keeps the session active when a tray host is available; **Quit** stops LocalBell. GNOME may require the AppIndicator and KStatusNotifierItem Support extension.
 
+Select **About** for the installed version and maintainer. **Project page** opens the LocalBell repository in your default browser.
+
+#### 📦 Install for your user
+
+If you started LocalBell manually, select **Quit** in the tray before installing so the service can take over. From a LocalBell source checkout, build and install without `sudo`:
+
+```bash
+make build
+./install.sh
+```
+
+To use a downloaded release instead, extract the archive, then pass the binary path to the installer. Run the same command with a newer binary to upgrade:
+
+```bash
+./install.sh /path/to/extracted/localbell
+```
+
+The installer adds `~/.local/bin/localbell`, `~/.local/share/applications/localbell.desktop`, and `localbell.service` under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`. The **LocalBell** launcher opens the window, including when the client is already running in the tray. It does not start a second client.
+
+The user service starts LocalBell with `--start-minimized` once the graphical session is active and an up interface has a non-loopback IPv4 address. It stops at logout. The client keeps retrying if the phone is not yet reachable. If the graphical session is not active during installation, the service is enabled for the next supported graphical login. On desktops without systemd graphical session integration, use the launcher or run the standalone binary.
+
+To stop and disable the user service and remove the installed files, run from the source checkout:
+
+```bash
+./uninstall.sh
+```
+
+Uninstalling preserves your pairing and configuration.
+
 ### 📱 App (Android)
 
 Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. The listener binds IPv4 on port `19420` by default and rejects nonlocal peers before TLS. A wildcard bind is not VPN-only.
@@ -69,6 +98,8 @@ Download and install `localbell-X.Y.Z.apk` from the same release. Android may as
 | **Desktop**  | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
 | **App**     | Android 14 or later (API 34+)                                                        |
 | **Network** | Both devices reachable on the same LAN or tailnet                                               |
+
+The optional user installer needs a systemd user manager, `ip` (iproute2) and `xdg-open` (xdg-utils). Automatic startup needs a desktop that activates `graphical-session.target`. A system tray is needed to start with no window; the standalone binary does not require systemd or `ip`. Opening **Project page** requires `xdg-open` even when running standalone.
 
 ## 🔒 Security
 

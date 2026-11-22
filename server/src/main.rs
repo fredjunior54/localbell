@@ -60,13 +60,22 @@ fn main() -> Result<()> {
         .create(true)
         .truncate(false)
         .open(dir.join("instance.lock"))?;
-    lock.try_lock().context("LocalBell is already running")?;
     let runtime = tokio::runtime::Runtime::new()?;
+    match lock.try_lock() {
+        Ok(()) => (),
+        Err(std::fs::TryLockError::WouldBlock) if start_minimized => return Ok(()),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            return runtime
+                .block_on(ui::show_running_window())
+                .context("LocalBell is already running, but its window could not be opened");
+        }
+        Err(error) => return Err(error).context("Lock the LocalBell instance"),
+    }
     let phone = Arc::new(phone::Controller::start(
         &runtime,
         dir.join("phone-v1.json"),
     )?);
-    let result = ui::run(phone, start_minimized);
+    let result = ui::run(phone, start_minimized, &runtime);
     runtime.shutdown_timeout(Duration::from_secs(2));
     result
 }
