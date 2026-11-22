@@ -1,12 +1,10 @@
 package io.github.fredjunior54.localbell.service
 
 import android.app.Notification
-import android.app.NotificationManager
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import androidx.core.app.NotificationManagerCompat
 import io.github.fredjunior54.localbell.di.AppModule
 import io.github.fredjunior54.localbell.network.NotificationRequest
 import io.github.fredjunior54.localbell.network.PhoneSessionRuntime
@@ -82,7 +80,7 @@ class NotificationForwarderService : NotificationListenerService() {
         return true
     }
 
-    private fun makeRequest(sbn: StatusBarNotification): NotificationRequest? {
+    internal fun makeRequest(sbn: StatusBarNotification): NotificationRequest? {
         val notification = sbn.notification
         val extras = notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
@@ -92,36 +90,13 @@ class NotificationForwarderService : NotificationListenerService() {
             return null
         }
         val appName = getAppName(sbn.packageName)
-        val urgency = mapUrgency(notification.channelId)
-        val timeoutMs = notification.timeoutAfter.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
         return NotificationRequest(
             key = sbn.key,
             app_name = appName,
             package_name = sbn.packageName,
             title = title,
             message = text,
-            urgency = urgency,
-            timeout_ms = if (timeoutMs > 0) timeoutMs else -1,
         )
-    }
-
-    private fun mapUrgency(channelId: String?): Int {
-        val importance =
-            if (channelId != null) {
-                NotificationManagerCompat.from(this)
-                    .getNotificationChannelCompat(channelId)
-                    ?.importance ?: NotificationManager.IMPORTANCE_DEFAULT
-            } else {
-                NotificationManager.IMPORTANCE_DEFAULT
-            }
-        return when (importance) {
-            NotificationManager.IMPORTANCE_MIN,
-            NotificationManager.IMPORTANCE_LOW -> 0
-            NotificationManager.IMPORTANCE_DEFAULT -> 1
-            NotificationManager.IMPORTANCE_HIGH,
-            NotificationManager.IMPORTANCE_MAX -> 2
-            else -> 1
-        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {

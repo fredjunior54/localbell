@@ -116,7 +116,18 @@ mod tests {
             hints: std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
             timeout: i32,
         ) -> zbus::fdo::Result<u32> {
-            let _ = (app, body, actions, timeout);
+            let _ = (app, body, actions);
+            if title == "LocalBell test notification"
+                && (timeout != -1
+                    || hints
+                        .get("urgency")
+                        .and_then(|value| u8::try_from(value).ok())
+                        != Some(1))
+            {
+                return Err(zbus::fdo::Error::Failed(
+                    "Unexpected urgency or expiration".into(),
+                ));
+            }
             let expects_image = previous == 42 || title == "LocalBell test notification";
             if expects_image != hints.contains_key("image-data") || icon.is_empty() != expects_image
             {

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,9 +14,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Phonelink
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -30,9 +33,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.fredjunior54.localbell.R
@@ -42,6 +47,7 @@ import io.github.fredjunior54.localbell.network.SessionDelivery
 import io.github.fredjunior54.localbell.service.PhoneSessionService
 import io.github.fredjunior54.localbell.service.sessionPayload
 import io.github.fredjunior54.localbell.service.withAppArtwork
+import io.github.fredjunior54.localbell.ui.theme.ListenerStatusColors
 import io.github.fredjunior54.localbell.ui.theme.spacing
 import io.github.fredjunior54.localbell.util.LocalNetworkPermission
 import java.util.UUID
@@ -204,42 +210,105 @@ private fun ListenerAction(
 }
 
 @Composable
-private fun ListenerStatus(port: Int, status: PhoneSessionRuntime.Status) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(MaterialTheme.spacing.lg)) {
-            val phase =
-                when (status.phase) {
-                    PhoneSessionRuntime.Phase.STARTING -> R.string.listener_starting
-                    PhoneSessionRuntime.Phase.LISTENING -> R.string.listener_waiting
-                    PhoneSessionRuntime.Phase.PAIRING -> R.string.listener_pairing
-                    PhoneSessionRuntime.Phase.UNAVAILABLE -> R.string.listener_unavailable
-                    PhoneSessionRuntime.Phase.READY -> R.string.listener_ready
-                    PhoneSessionRuntime.Phase.FAILED -> R.string.listener_start_failed
-                    PhoneSessionRuntime.Phase.STOPPED -> R.string.listener_stopped
-                }
-            Text(stringResource(phase), style = MaterialTheme.typography.bodyLarge)
-            Text(stringResource(R.string.listener_port_status, port))
-            status.address?.let { Text(stringResource(R.string.listener_peer_status, it)) }
-            Text(stringResource(R.string.listener_forwarded, status.forwarded))
-            status.outcomeTime?.let { stamp ->
-                val context = LocalContext.current
-                val time =
-                    android.text.format.DateFormat.getTimeFormat(context)
-                        .format(java.util.Date(stamp))
-                val outcome =
-                    stringResource(
-                        if (status.accepted == true) R.string.listener_outcome_accepted
-                        else R.string.listener_outcome_failed,
-                    )
-                Text(stringResource(R.string.listener_outcome_status, outcome, time))
-            }
-            status.testAccepted?.let {
+internal fun ListenerStatus(port: Int, status: PhoneSessionRuntime.Status) {
+    val container = MaterialTheme.colorScheme.surfaceContainerHighest
+    val foreground = MaterialTheme.colorScheme.onSurface
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = container),
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md),
+        ) {
+            ListenerPhase(status.phase, container, foreground)
+            Column {
                 Text(
-                    stringResource(
-                        if (it) R.string.listener_test_delivered else R.string.listener_test_failed,
-                    ),
+                    stringResource(R.string.listener_count, status.forwarded),
+                    style = MaterialTheme.typography.headlineLarge,
+                )
+                Text(
+                    stringResource(R.string.listener_forwarded),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = secondary,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+                status.address?.let {
+                    ListenerDetail(stringResource(R.string.listener_peer_status, it))
+                }
+                ListenerDetail(stringResource(R.string.listener_port_status, port))
+                status.outcomeTime?.let { stamp ->
+                    val time =
+                        android.text.format.DateFormat.getTimeFormat(LocalContext.current)
+                            .format(java.util.Date(stamp))
+                    val outcome =
+                        stringResource(
+                            if (status.accepted == true) R.string.listener_outcome_accepted
+                            else R.string.listener_outcome_failed,
+                        )
+                    ListenerDetail(stringResource(R.string.listener_outcome_status, outcome, time))
+                }
+            }
+            if (status.testAccepted == false) {
+                Text(
+                    stringResource(R.string.listener_test_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun ListenerPhase(
+    phase: PhoneSessionRuntime.Phase,
+    background: Color,
+    foreground: Color,
+) {
+    val label =
+        when (phase) {
+            PhoneSessionRuntime.Phase.STARTING -> R.string.listener_starting
+            PhoneSessionRuntime.Phase.LISTENING -> R.string.listener_waiting
+            PhoneSessionRuntime.Phase.PAIRING -> R.string.listener_pairing
+            PhoneSessionRuntime.Phase.UNAVAILABLE -> R.string.listener_unavailable
+            PhoneSessionRuntime.Phase.READY -> R.string.listener_ready
+            PhoneSessionRuntime.Phase.FAILED -> R.string.listener_start_failed
+            PhoneSessionRuntime.Phase.STOPPED -> R.string.listener_stopped
+        }
+    val color =
+        when (phase) {
+            PhoneSessionRuntime.Phase.READY ->
+                ListenerStatusColors.text(true, background, foreground)
+            PhoneSessionRuntime.Phase.LISTENING ->
+                ListenerStatusColors.text(false, background, foreground)
+            else -> foreground
+        }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.Phonelink,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(label),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = color,
+        )
+    }
+}
+
+@Composable
+private fun ListenerDetail(value: String) {
+    Text(
+        value,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

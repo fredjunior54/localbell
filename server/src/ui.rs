@@ -166,7 +166,7 @@ impl eframe::App for App {
             )
             .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading(egui::RichText::new("LocalBell").size(36.0).color(MAUVE));
+                    ui.heading(egui::RichText::new("LocalBell").size(24.0).color(MAUVE));
                     ui.add_space(SECTION_GAP);
                     self.phone_controls(ui);
                 });

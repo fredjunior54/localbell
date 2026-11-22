@@ -32,7 +32,7 @@ class ReverseSessionControlsTest {
                 compose.onNodeWithText("Forwarding").assertDoesNotExist()
                 compose.onNodeWithText("App Filters").assertIsDisplayed()
                 compose.onNodeWithText("Send Test Notification").assertIsNotEnabled()
-                compose.onNodeWithText("Forwarded this session: 0").assertExists()
+                assertEmptyForwardingCount()
                 compose.onNodeWithText("Listener settings").performClick()
                 compose.onNodeWithText("Port").assertIsDisplayed()
                 compose.onNodeWithText("19420").assertIsDisplayed()
@@ -58,10 +58,11 @@ class ReverseSessionControlsTest {
             try {
                 awaitText("Numbers match")
                 compose.onNodeWithText("Numbers match").performClick()
-                awaitText("Connected • Ready to forward")
+                awaitText("Ready to forward")
                 compose.onNodeWithText("Send Test Notification").performScrollTo().performClick()
-                awaitText("Test notification delivered.")
-                compose.onNodeWithText("Forwarded this session: 0").assertExists()
+                awaitText("Last result: Accepted", substring = true)
+                compose.onNodeWithText("Test notification delivered.").assertDoesNotExist()
+                assertEmptyForwardingCount()
             } finally {
                 PhoneSessionService.active?.unpair()
                 context.stopService(Intent(context, PhoneSessionService::class.java))
@@ -69,9 +70,17 @@ class ReverseSessionControlsTest {
         }
     }
 
-    private fun awaitText(value: String) {
+    private fun assertEmptyForwardingCount() {
+        compose.onNodeWithText("Forwarded this session").assertExists()
+        compose.onNodeWithText("0").assertExists()
+    }
+
+    private fun awaitText(value: String, substring: Boolean = false) {
         compose.waitUntil(timeoutMillis = 20_000) {
-            compose.onAllNodes(hasText(value)).fetchSemanticsNodes().isNotEmpty()
+            compose
+                .onAllNodes(hasText(value, substring = substring))
+                .fetchSemanticsNodes()
+                .isNotEmpty()
         }
     }
 }

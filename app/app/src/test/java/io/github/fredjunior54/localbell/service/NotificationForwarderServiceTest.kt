@@ -68,11 +68,27 @@ class NotificationForwarderServiceTest {
         assertEquals(emptyList<String>(), processedPackages)
     }
 
+    @Test
+    fun `forwarded requests use desktop defaults even with source overrides`() {
+        val service =
+            Robolectric.buildService(NotificationForwarderService::class.java).create().get()
+        val source = statusBarNotification(isGroupSummary = false)
+        val payload = checkNotNull(service.makeRequest(source)).sessionPayload()
+
+        assertEquals(1, payload.getInt("urgency"))
+        assertEquals(-1, payload.getInt("timeout_ms"))
+        assertEquals(source.key, payload.getString("key"))
+        assertEquals("Sample message", payload.getString("message"))
+    }
+
+    @Suppress("DEPRECATION") // Verify legacy priority cannot set desktop urgency.
     private fun statusBarNotification(isGroupSummary: Boolean): StatusBarNotification {
         val notification =
             Notification.Builder(RuntimeEnvironment.getApplication(), "messages")
-                .setContentTitle("Francesca Castellano")
-                .setContentText("Prova")
+                .setContentTitle("Sample title")
+                .setContentText("Sample message")
+                .setPriority(Notification.PRIORITY_MAX)
+                .setTimeoutAfter(120_000L)
                 .setGroup("chat")
                 .setGroupSummary(isGroupSummary)
                 .build()
