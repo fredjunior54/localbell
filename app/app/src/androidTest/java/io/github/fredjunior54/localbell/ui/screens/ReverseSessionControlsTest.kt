@@ -74,8 +74,7 @@ class ReverseSessionControlsTest {
     }
 
     private fun assertEmptyForwardingCount() {
-        compose.onNodeWithText("Forwarded this session").assertExists()
-        compose.onNodeWithText("0").assertExists()
+        compose.onNodeWithText("0 notifications").assertExists()
     }
 
     private fun awaitText(value: String, substring: Boolean = false) {

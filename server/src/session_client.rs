@@ -260,6 +260,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn repeated_request_id_never_reaches_delivery_twice() -> Result<()> {
+        let (mut desktop, mut remote) = tokio::io::duplex(2048);
+        let credential = Credential {
+            leaf: [1; 32],
+            token: [2; 32],
+        };
+        let deliveries = std::cell::Cell::new(0);
+        let forward = forward(&mut desktop, &credential, true, |_| {
+            deliveries.set(deliveries.get() + 1);
+            std::future::ready(true)
+        });
+        let phone_flow = async {
+            let _: Option<DesktopMessage> = receive(&mut remote, IO_TIMEOUT).await?;
+            phone(&mut remote, PhoneMessage::Authenticated).await?;
+            let _: Option<DesktopMessage> = receive(&mut remote, IO_TIMEOUT).await?;
+            for _ in 0..2 {
+                phone(
+                    &mut remote,
+                    PhoneMessage::Notification {
+                        id: 1,
+                        payload: json!({"key":"repeat"}),
+                    },
+                )
+                .await?;
+            }
+            Ok::<_, anyhow::Error>(())
+        };
+        let (result, phone_result) = tokio::join!(forward, phone_flow);
+        phone_result?;
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid session request ID")
+        );
+        assert_eq!(deliveries.get(), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn final_confirmation_is_not_offered_before_phone_approval() -> Result<()> {
         use std::cell::Cell;
         for phone_accepts in [false, true] {

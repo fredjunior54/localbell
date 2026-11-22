@@ -24,8 +24,14 @@
     <string name="listener_permission_denied">Allow local network access to listen for your desktop.</string>
     <string name="listener_port_status">Listen port: %1$d</string>
     <string name="listener_peer_status">Desktop: %1$s</string>
-    <string name="listener_forwarded">Forwarded this session</string>
-    <string name="listener_count">%1$d</string>
+    <plurals name="listener_notifications">
+        <item quantity="one">%1$s notification</item>
+        <item quantity="other">%1$s notifications</item>
+    </plurals>
+    <string name="access_granted">Granted</string>
+    <string name="access_required">Not granted</string>
+    <string name="battery_unrestricted">Unrestricted</string>
+    <string name="battery_restricted">Restricted</string>
     <string name="listener_test_failed">Could not deliver the test notification.</string>
     <string name="listener_outcome_accepted">Accepted</string>
     <string name="listener_outcome_failed">Not accepted</string>

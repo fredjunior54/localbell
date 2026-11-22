@@ -32,6 +32,33 @@ enum Request {
     Connect(Settings),
 }
 
+#[derive(Clone, Copy)]
+pub struct Connected {
+    pub endpoint: SocketAddrV4,
+    pub forwarded: u64,
+}
+
+struct ConnectionStatus<'a>(&'a Mutex<Status>);
+
+impl Drop for ConnectionStatus<'_> {
+    fn drop(&mut self) {
+        self.0.lock().unwrap().connected = None;
+    }
+}
+
+fn is_automatic(event: &Event) -> bool {
+    matches!(event, Event::Notification(payload) if payload["key"].as_str().is_some_and(|key| !key.starts_with("localbell-test-")))
+}
+
+fn record_delivery(status: &Mutex<Status>, automatic: bool, accepted: bool) {
+    if accepted
+        && automatic
+        && let Some(session) = status.lock().unwrap().connected.as_mut()
+    {
+        session.forwarded = session.forwarded.saturating_add(1);
+    }
+}
+
 #[derive(Default)]
 pub struct Status {
     pub message: &'static str,
@@ -39,6 +66,7 @@ pub struct Status {
     pub approval: Option<oneshot::Sender<bool>>,
     pub saved: bool,
     pub busy: bool,
+    pub connected: Option<Connected>,
 }
 
 pub struct Controller {
@@ -111,6 +139,7 @@ impl Controller {
             Err(error) => return Err(error).context("Remove saved phone configuration"),
         }
         status.saved = false;
+        status.connected = None;
         status.comparison = None;
         status.approval = None;
         self.tx.send_replace(Request::Idle);
@@ -269,6 +298,10 @@ async fn connect(
     status: &Mutex<Status>,
 ) -> Result<Disconnect> {
     let mut socket = session_tls::connect(resolve(settings).await?, credential.leaf).await?;
+    let SocketAddr::V4(endpoint) = socket.get_ref().0.peer_addr()? else {
+        anyhow::bail!("Expected a phone IPv4 endpoint");
+    };
+    let _connection_status = ConnectionStatus(status);
     let usable = ready().await;
     let delivered = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
     let session = session_client::forward_with_status(
@@ -276,6 +309,15 @@ async fn connect(
         credential,
         usable,
         || {
+            {
+                let mut view = status.lock().unwrap();
+                if view.saved {
+                    view.connected = Some(Connected {
+                        endpoint,
+                        forwarded: 0,
+                    });
+                }
+            }
             message(
                 status,
                 if usable {
@@ -289,9 +331,11 @@ async fn connect(
             let delivered = Arc::clone(&delivered);
             async move {
                 let started = tokio::time::Instant::now();
+                let automatic = is_automatic(&event);
                 let accepted = deliver(&mut *delivered.lock().await, event)
                     .await
                     .unwrap_or(false);
+                record_delivery(status, automatic, accepted);
                 tracing::debug!(
                     accepted,
                     elapsed_ms = started.elapsed().as_millis() as u64,
@@ -345,6 +389,40 @@ pub(crate) async fn deliver(active: &mut HashMap<String, u32>, event: Event) -> 
 mod tests {
     use super::*;
 
+    #[test]
+    fn counts_only_accepted_automatic_notifications_in_each_session() -> Result<()> {
+        use serde_json::json;
+        let status = Mutex::new(Status::default());
+        let endpoint = "192.168.0.2:19420".parse()?;
+        let automatic = Event::Notification(json!({"key":"notification-1"}));
+        let test = Event::Notification(json!({"key":"localbell-test-fixture"}));
+        let invalid = Event::Notification(json!({}));
+        let dismissal = Event::Dismiss("notification-1".into());
+        record_delivery(&status, true, true);
+        assert!(status.lock().unwrap().connected.is_none());
+        for _ in 0..2 {
+            let guard = ConnectionStatus(&status);
+            status.lock().unwrap().connected = Some(Connected {
+                endpoint,
+                forwarded: 0,
+            });
+            for (event, accepted) in [
+                (&automatic, true),
+                (&automatic, true),
+                (&test, true),
+                (&invalid, false),
+                (&dismissal, true),
+                (&automatic, false),
+            ] {
+                record_delivery(&status, is_automatic(event), accepted);
+            }
+            assert_eq!(status.lock().unwrap().connected.unwrap().forwarded, 2);
+            drop(guard);
+            assert!(status.lock().unwrap().connected.is_none());
+        }
+        Ok(())
+    }
+
     #[tokio::test]
     async fn resolution_excludes_public_and_loopback_addresses() -> Result<()> {
         let mut settings = Settings {
@@ -380,7 +458,12 @@ mod tests {
             .build()?;
         let controller = Controller::start(&runtime, path.clone())?;
         assert!(controller.pair("192.168.0.3", 19420).is_err());
+        controller.status.lock().unwrap().connected = Some(Connected {
+            endpoint: "192.168.0.2:19420".parse()?,
+            forwarded: 1,
+        });
         controller.forget()?;
+        assert!(controller.status.lock().unwrap().connected.is_none());
         assert!(!path.exists());
         runtime.block_on(async { tokio::task::yield_now().await });
         assert!(!controller.status.lock().unwrap().saved);

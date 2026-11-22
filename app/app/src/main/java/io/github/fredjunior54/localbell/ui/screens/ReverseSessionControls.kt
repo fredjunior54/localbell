@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Phonelink
@@ -37,7 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,6 +55,7 @@ import io.github.fredjunior54.localbell.service.withAppArtwork
 import io.github.fredjunior54.localbell.ui.theme.ListenerStatusColors
 import io.github.fredjunior54.localbell.ui.theme.spacing
 import io.github.fredjunior54.localbell.util.LocalNetworkPermission
+import java.text.NumberFormat
 import java.util.UUID
 import kotlinx.coroutines.delay
 
@@ -282,17 +286,26 @@ internal fun ListenerStatus(port: Int, status: PhoneSessionRuntime.Status) {
             modifier = Modifier.padding(MaterialTheme.spacing.lg),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md),
         ) {
-            ListenerPhase(status.phase, container, foreground)
-            Column {
-                Text(
-                    stringResource(R.string.listener_count, status.forwarded),
-                    style = MaterialTheme.typography.headlineLarge,
-                )
-                Text(
-                    stringResource(R.string.listener_forwarded),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = secondary,
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+                ListenerPhase(status.phase, container, foreground)
+                val locale = LocalConfiguration.current.locales[0]
+                val count = NumberFormat.getIntegerInstance(locale).format(status.forwarded)
+                val quantity = status.forwarded.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.Send,
+                        contentDescription = null,
+                        tint = secondary,
+                    )
+                    Text(
+                        pluralStringResource(R.plurals.listener_notifications, quantity, count),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
                 status.address?.let {

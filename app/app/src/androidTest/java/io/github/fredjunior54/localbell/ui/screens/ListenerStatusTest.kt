@@ -29,6 +29,12 @@ class ListenerStatusTest {
                 ListenerStatus(19420, status.value)
             }
         }
+        compose.onNodeWithText("0 notifications").assertIsDisplayed()
+        compose.runOnIdle { status.value = status.value.copy(forwarded = 1) }
+        compose.onNodeWithText("1 notification").assertIsDisplayed()
+        compose.runOnIdle { status.value = status.value.copy(forwarded = 2) }
+        compose.onNodeWithText("2 notifications").assertIsDisplayed()
+        compose.onNodeWithText("Forwarded this session").assertDoesNotExist()
         compose.onNodeWithText("Ready to forward").assertIsDisplayed()
         compose.onNodeWithText("Test notification delivered.").assertDoesNotExist()
         compose.runOnIdle { status.value = status.value.copy(testAccepted = false) }

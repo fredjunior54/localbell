@@ -11,6 +11,13 @@ use std::{
 };
 
 // Catppuccin Mocha (https://github.com/catppuccin/catppuccin).
+const PROJECT_PAGE: &str = "https://github.com/fredjunior54/localbell";
+const GREEN: Color32 = Color32::from_rgb(166, 227, 161);
+const INFO_ICON: char = '\u{f05a}';
+const STATUS_ICON: char = '\u{f080}';
+const NETWORK_ICON: char = '\u{f0ac}';
+const PORT_ICON: char = '\u{f023}';
+const CONNECTED_ICON: char = '\u{f058}';
 const BASE: Color32 = Color32::from_rgb(30, 30, 46);
 const MANTLE: Color32 = Color32::from_rgb(24, 24, 37);
 const SURFACE: Color32 = Color32::from_rgb(49, 50, 68);
@@ -138,6 +145,8 @@ struct App {
     phone_host: String,
     phone_port: String,
     phone_error: String,
+    about_open: bool,
+    about_artwork: Option<egui::TextureHandle>,
 }
 
 impl eframe::App for App {
@@ -172,16 +181,83 @@ impl eframe::App for App {
             )
             .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading(egui::RichText::new("LocalBell").size(24.0).color(MAUVE));
+                    ui.horizontal(|ui| {
+                        ui.heading(egui::RichText::new("LocalBell").size(24.0).color(MAUVE));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if action(ui, INFO_ICON, "About", MAUVE, true).clicked() {
+                                self.about_open = true;
+                            }
+                        });
+                    });
                     ui.add_space(SECTION_GAP);
                     self.phone_controls(ui);
+                    let connected = self.phone.status.lock().unwrap().connected;
+                    if let Some(session) = connected {
+                        ui.add_space(SECTION_GAP);
+                        connected_status(ui, session);
+                    }
                 });
             });
-        self.pairing_dialog(ui.ctx());
+        if self.phone.status.lock().unwrap().approval.is_some() {
+            self.about_open = false;
+            self.pairing_dialog(ui.ctx());
+        } else if self.about_open {
+            self.about_dialog(ui.ctx());
+        }
     }
 }
 
 impl App {
+    fn about_dialog(&mut self, ctx: &egui::Context) {
+        let artwork = &mut self.about_artwork;
+        let modal = egui::Modal::new(egui::Id::new("about-localbell")).show(ctx, |ui| {
+            let available = ctx.content_rect().size();
+            ui.set_max_width((available.x - 2.0 * SECTION_GAP).clamp(1.0, 360.0));
+            section(ui, INFO_ICON, "About LocalBell");
+            ui.add_space(GAP);
+            egui::ScrollArea::vertical()
+                .max_height((available.y - 120.0).max(1.0))
+                .show(ui, |ui| {
+                    if artwork.is_none()
+                        && let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!(
+                            "../../assets/localbell.png"
+                        ))
+                    {
+                        let image = egui::ColorImage::from_rgba_unmultiplied(
+                            [icon.width as usize, icon.height as usize],
+                            &icon.rgba,
+                        );
+                        *artwork = Some(ctx.load_texture(
+                            "localbell-about",
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        ));
+                    }
+                    if let Some(artwork) = artwork {
+                        let width = ui.available_width().min(220.0);
+                        let size = artwork.size_vec2();
+                        ui.vertical_centered(|ui| {
+                            ui.image((artwork.id(), egui::vec2(width, width * size.y / size.x)))
+                        });
+                    }
+                    ui.label(
+                        "Forward notifications from your Android phone to your Linux desktop.",
+                    );
+                    ui.label(concat!("Version ", env!("CARGO_PKG_VERSION")));
+                    ui.label("Maintained by Fred Junior");
+                });
+            ui.add_space(GAP);
+            ui.horizontal_wrapped(|ui| {
+                if action(ui, NETWORK_ICON, "Project page", MAUVE, true).clicked() {
+                    ctx.open_url(egui::OpenUrl::new_tab(PROJECT_PAGE));
+                }
+                action(ui, CANCEL_ICON, "Close", TEXT, true).clicked()
+            })
+            .inner
+        });
+        self.about_open = !(modal.inner || modal.should_close());
+    }
+
     fn pairing_dialog(&self, ctx: &egui::Context) {
         let mut status = self.phone.status.lock().unwrap();
         let Some(number) = status
@@ -195,12 +271,7 @@ impl App {
             ui.vertical_centered(|ui| {
                 section(ui, PAIR_ICON, "Confirm pairing");
                 ui.add_space(GAP);
-                ui.label(
-                    egui::RichText::new(number)
-                        .size(24.0)
-                        .strong()
-                        .color(Color32::from_rgb(166, 227, 161)),
-                );
+                ui.label(egui::RichText::new(number).size(24.0).strong().color(GREEN));
                 ui.add_space(GAP);
             });
             ui.horizontal(|ui| {
@@ -235,10 +306,14 @@ impl App {
             section(ui, PHONE_ICON, "Phone Configuration");
             ui.label(message);
             if !saved {
-                ui.label("Phone address");
-                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.phone_host));
-                ui.label("Port");
-                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.phone_port));
+                phone_field(
+                    ui,
+                    "Phone IP address or hostname",
+                    &mut self.phone_host,
+                    "192.168.1.42",
+                    !busy,
+                );
+                phone_field(ui, "Port", &mut self.phone_port, "", !busy);
                 if action(ui, SETTINGS_ICON, "Pair", MAUVE, !busy).clicked() {
                     let result = self
                         .phone_port
@@ -272,6 +347,60 @@ impl App {
             }
         });
     }
+}
+
+fn phone_field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str, enabled: bool) {
+    let label = ui.label(label);
+    ui.scope(|ui| {
+        let visuals = ui.visuals_mut();
+        visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, OVERLAY);
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, OVERLAY);
+        visuals.selection.stroke = Stroke::new(1.0, MAUVE);
+        ui.add_enabled(
+            enabled,
+            egui::TextEdit::singleline(value)
+                .hint_text(egui::RichText::new(hint).color(Color32::from_rgb(166, 173, 200)))
+                .background_color(SURFACE)
+                .desired_width(ui.available_width())
+                .margin(egui::Margin::same(GAP as i8)),
+        )
+        .labelled_by(label.id);
+    });
+}
+
+fn connected_status(ui: &mut egui::Ui, session: crate::phone::Connected) {
+    surface(ui, |ui| {
+        section(ui, STATUS_ICON, "Status");
+        ui.add_space(GAP);
+        ui.horizontal(|ui| {
+            detail_icon(ui, CONNECTED_ICON, GREEN);
+            ui.colored_label(GREEN, "Connected");
+        });
+        ui.add_space(GAP);
+        ui.label(
+            egui::RichText::new(session.forwarded.to_string())
+                .size(24.0)
+                .strong(),
+        );
+        ui.label("Forwarded this session");
+        ui.add_space(GAP);
+        ui.horizontal_wrapped(|ui| {
+            detail_icon(ui, NETWORK_ICON, TEXT);
+            ui.label(format!("Phone IP address: {}", session.endpoint.ip()));
+        });
+        ui.horizontal_wrapped(|ui| {
+            detail_icon(ui, PORT_ICON, TEXT);
+            ui.label(format!("Port: {}", session.endpoint.port()));
+        });
+    });
+}
+
+fn detail_icon(ui: &mut egui::Ui, glyph: char, color: Color32) {
+    ui.label(
+        egui::RichText::new(glyph.to_string())
+            .family(symbol_family())
+            .color(color),
+    );
 }
 
 pub fn run(phone: Arc<Controller>) -> Result<()> {
@@ -390,6 +519,8 @@ fn open_window(window: Arc<Window>, icon: egui::IconData, phone: Arc<Controller>
                 phone_host: phone.host.clone(),
                 phone_port: phone.port.to_string(),
                 phone_error: String::new(),
+                about_open: false,
+                about_artwork: None,
                 phone,
             }))
         }),

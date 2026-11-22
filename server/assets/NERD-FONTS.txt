@@ -1,4 +1,4 @@
 LocalBell embeds subsets of CaskaydiaCove Nerd Font Regular and Symbols Nerd Font Regular from Nerd Fonts v3.5.1:
 https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1
 
-The text subset contains Latin and punctuation; egui provides fallback glyphs. The symbols subset contains U+F00C, U+F00D, U+F013, U+F014, U+F023, U+F10B, and U+F233. The subsets do not use the reserved name Cascadia Code. See the adjacent CaskaydiaCove-LICENSE.txt and Symbols-Nerd-LICENSE.txt for redistribution terms.
+The text subset contains Latin and punctuation; egui provides fallback glyphs. The symbols subset contains U+F00C, U+F00D, U+F013, U+F014, U+F023, U+F058, U+F05A, U+F080, U+F0AC, U+F10B, and U+F233. The subsets do not use the reserved name Cascadia Code. See the adjacent CaskaydiaCove-LICENSE.txt and Symbols-Nerd-LICENSE.txt for redistribution terms.
