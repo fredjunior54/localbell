@@ -1,9 +1,0 @@
-#!/bin/sh
-set -e
-
-echo ""
-echo "To enable LocalBell for your user, run:"
-echo "  systemctl --user enable --now localbell"
-echo ""
-
-exit 0

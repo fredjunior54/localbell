@@ -1,6 +1,6 @@
 [package]
 name = "localbell"
-version = "1.4.30"
+version = "1.4.31"
 edition = "2024"
 
 [dependencies]
