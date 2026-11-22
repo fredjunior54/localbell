@@ -31,6 +31,25 @@ Run every practical automated or noninteractive verification yourself, including
 
 For reverse-session interoperability, run `./scripts/test-reverse-emulator.sh emulator-SERIAL` with a fresh, running Android emulator. It installs debug fixtures only on the selected emulator and uses an isolated D-Bus daemon.
 
+### Isolated Wayland testing
+
+For Linux UI tests, launch LocalBell inside a nested niri compositor from a Wayland desktop. Give the test its own D-Bus session and XDG configuration so it does not use the real notification daemon or saved pairing. This isolates the desktop session, not the host filesystem or network; do not enter a real phone address or send live notifications.
+
+From the repository root, run this in Bash (requires `niri` and `dbus-run-session`):
+
+```bash
+cargo build --locked --manifest-path server/Cargo.toml
+fixture=$(mktemp -d "${TMPDIR:-/tmp}/localbell-wayland.XXXXXX")
+mkdir -p "$fixture/config"
+printf '%s\n' 'animations { off; }' > "$fixture/niri.kdl"
+dbus-run-session -- niri -c "$fixture/niri.kdl" -- \
+  env XDG_CONFIG_HOME="$fixture/config" "$PWD/server/target/debug/localbell"
+```
+
+For noninteractive tests, have niri launch a test script in place of `env ...`. The script inherits the nested `WAYLAND_DISPLAY`, `NIRI_SOCKET`, and `DBUS_SESSION_BUS_ADDRESS`. Use those inherited values for `niri msg`, `wtype` (keyboard input), or `grim` (screenshots); running them from the original terminal without the nested environment can target the real desktop. Save captures under the fixture directory and end automated runs with `niri msg action quit --skip-confirmation` from inside the nested session. For manual inspection, close the nested compositor window when finished.
+
+For Android UI tests, use a dedicated emulator and target it explicitly with `adb -s emulator-SERIAL`. For browser previews such as README rendering, use headless Chromium with a temporary `--user-data-dir` rather than the user's browser profile.
+
 ### Android build cleanup
 
 For one-off builds, tests, and lint, prefer `--no-daemon` and `-Pkotlin.compiler.execution.strategy=in-process` when running Gradle directly. After Android work, including failed runs, check for idle Gradle and Kotlin daemons left by this checkout. Use `cd app && ./gradlew --status` to verify that no same-version builds are active before running `./gradlew --stop` from `app/`. If a Kotlin daemon from this run remains, verify its PID and ownership before sending it `SIGTERM`. Do not stop unrelated Java processes or reset swap.
