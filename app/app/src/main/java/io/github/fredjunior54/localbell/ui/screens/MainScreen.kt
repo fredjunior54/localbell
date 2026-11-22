@@ -80,7 +80,10 @@ import io.github.fredjunior54.localbell.util.LocalNetworkPermission
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenViewModel.Factory)) {
+fun MainScreen(
+    viewModel: MainScreenViewModel = viewModel(factory = MainScreenViewModel.Factory),
+    reversePreview: Boolean = false,
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -136,7 +139,7 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
                     batteryOptDisabled = isBatteryOptimizationDisabled(context),
                 )
                 val localNetworkGranted = !LocalNetworkPermission.isMissing(context)
-                if (localNetworkGranted) {
+                if (localNetworkGranted && !reversePreview) {
                     cancelLocalNetworkNotification(context)
                     viewModel.refreshConnection()
                 }
@@ -258,6 +261,7 @@ fun MainScreen(viewModel: MainScreenViewModel = viewModel(factory = MainScreenVi
         },
         onFilterClick = { showBlacklist = true },
         blacklistedAppsCount = blacklistedAppsCount,
+        listenerContent = if (reversePreview) ({ ReverseSessionControls() }) else null,
     )
 }
 
@@ -278,6 +282,7 @@ fun MainScreenContent(
     onAboutClick: () -> Unit,
     onFilterClick: () -> Unit,
     blacklistedAppsCount: Int = 0,
+    listenerContent: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit = {},
 ) {
     Scaffold(
@@ -328,41 +333,44 @@ fun MainScreenContent(
                 onClick = onBatteryOptimizationClick,
             )
 
-            // Server configuration
-            Card(modifier = Modifier.fillMaxWidth(), onClick = onServerConfigClick) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Link,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Server Configuration",
-                            style = MaterialTheme.typography.bodyLarge,
+            if (listenerContent == null) {
+                // Server configuration
+                Card(modifier = Modifier.fillMaxWidth(), onClick = onServerConfigClick) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Link,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(
-                            text =
-                                if (isConfigured) stringResource(R.string.pairing_configured)
-                                else stringResource(R.string.pairing_enter_address),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Server Configuration",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                text =
+                                    if (isConfigured) stringResource(R.string.pairing_configured)
+                                    else stringResource(R.string.pairing_enter_address),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            imageVector =
+                                if (isConfigured) Icons.Default.CheckCircle
+                                else Icons.Default.Error,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint =
+                                if (isConfigured) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.error,
                         )
                     }
-                    Icon(
-                        imageVector =
-                            if (isConfigured) Icons.Default.CheckCircle else Icons.Default.Error,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint =
-                            if (isConfigured) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.error,
-                    )
                 }
             }
 
@@ -396,80 +404,85 @@ fun MainScreenContent(
                 }
             }
 
-            // Status section
-            SectionHeader("Status")
+            if (listenerContent != null) {
+                listenerContent()
+            } else {
+                // Status section
+                SectionHeader("Status")
 
-            // Server Connection Status
-            SettingRow(
-                icon =
-                    when (connectionState) {
-                        HealthMonitor.ConnectionState.CONNECTED -> Icons.Default.Cloud
-                        HealthMonitor.ConnectionState.CONNECTING -> Icons.Default.Sync
-                        HealthMonitor.ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
-                    },
-                title = "Server Status",
-                subtitle =
-                    when {
-                        !isConfigured -> "Configure first"
-                        connectionState == HealthMonitor.ConnectionState.CONNECTED ->
-                            serverUrl ?: "Connected"
-                        connectionState == HealthMonitor.ConnectionState.CONNECTING ->
-                            "Discovering..."
-                        else -> "Not found"
-                    },
-                isOk = connectionState == HealthMonitor.ConnectionState.CONNECTED,
-                onClick = null,
-            )
+                // Server Connection Status
+                SettingRow(
+                    icon =
+                        when (connectionState) {
+                            HealthMonitor.ConnectionState.CONNECTED -> Icons.Default.Cloud
+                            HealthMonitor.ConnectionState.CONNECTING -> Icons.Default.Sync
+                            HealthMonitor.ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
+                        },
+                    title = "Server Status",
+                    subtitle =
+                        when {
+                            !isConfigured -> "Configure first"
+                            connectionState == HealthMonitor.ConnectionState.CONNECTED ->
+                                serverUrl ?: "Connected"
+                            connectionState == HealthMonitor.ConnectionState.CONNECTING ->
+                                "Discovering..."
+                            else -> "Not found"
+                        },
+                    isOk = connectionState == HealthMonitor.ConnectionState.CONNECTED,
+                    onClick = null,
+                )
 
-            content()
+                content()
 
-            // Forward Switch
-            val isForwardingActive =
-                serviceEnabled &&
-                    hasNotificationAccess &&
-                    isConfigured &&
-                    connectionState == HealthMonitor.ConnectionState.CONNECTED
+                // Forward Switch
+                val isForwardingActive =
+                    serviceEnabled &&
+                        hasNotificationAccess &&
+                        isConfigured &&
+                        connectionState == HealthMonitor.ConnectionState.CONNECTED
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector =
-                            if (isForwardingActive) Icons.Default.CheckCircle
-                            else Icons.Default.Error,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint =
-                            if (isForwardingActive) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.error,
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Forwarding", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text =
-                                when {
-                                    !hasNotificationAccess -> "Grant access first"
-                                    !isConfigured -> "Configure first"
-                                    connectionState != HealthMonitor.ConnectionState.CONNECTED ->
-                                        "Waiting for server..."
-                                    !serviceEnabled -> "Disabled"
-                                    else -> "Active"
-                                },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector =
+                                if (isForwardingActive) Icons.Default.CheckCircle
+                                else Icons.Default.Error,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint =
+                                if (isForwardingActive) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.error,
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Forwarding", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text =
+                                    when {
+                                        !hasNotificationAccess -> "Grant access first"
+                                        !isConfigured -> "Configure first"
+                                        connectionState !=
+                                            HealthMonitor.ConnectionState.CONNECTED ->
+                                            "Waiting for server..."
+                                        !serviceEnabled -> "Disabled"
+                                        else -> "Active"
+                                    },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = serviceEnabled,
+                            onCheckedChange = onServiceEnabledChange,
+                            enabled =
+                                hasNotificationAccess &&
+                                    isConfigured &&
+                                    connectionState == HealthMonitor.ConnectionState.CONNECTED,
                         )
                     }
-                    Switch(
-                        checked = serviceEnabled,
-                        onCheckedChange = onServiceEnabledChange,
-                        enabled =
-                            hasNotificationAccess &&
-                                isConfigured &&
-                                connectionState == HealthMonitor.ConnectionState.CONNECTED,
-                    )
                 }
             }
         }
@@ -477,7 +490,7 @@ fun MainScreenContent(
 }
 
 @Composable
-private fun SectionHeader(title: String) {
+internal fun SectionHeader(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.labelLarge,

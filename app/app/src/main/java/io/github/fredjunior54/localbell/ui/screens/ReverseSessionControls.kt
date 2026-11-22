@@ -1,0 +1,245 @@
+package io.github.fredjunior54.localbell.ui.screens
+
+import android.Manifest
+import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.fredjunior54.localbell.R
+import io.github.fredjunior54.localbell.network.NotificationRequest
+import io.github.fredjunior54.localbell.network.PhoneSessionRuntime
+import io.github.fredjunior54.localbell.network.SessionDelivery
+import io.github.fredjunior54.localbell.service.PhoneSessionService
+import io.github.fredjunior54.localbell.service.sessionPayload
+import io.github.fredjunior54.localbell.service.withAppArtwork
+import io.github.fredjunior54.localbell.ui.theme.spacing
+import io.github.fredjunior54.localbell.util.LocalNetworkPermission
+import java.util.UUID
+
+@Composable
+internal fun ReverseSessionControls() {
+    val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("listener-v1", 0) }
+    var port by rememberSaveable {
+        mutableStateOf(prefs.getInt("port", PhoneSessionService.DEFAULT_PORT))
+    }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showUnpair by rememberSaveable { mutableStateOf(false) }
+    var error by remember { mutableStateOf<Int?>(null) }
+    val runtime by PhoneSessionService.sessions.collectAsStateWithLifecycle()
+    val status =
+        runtime?.status?.collectAsStateWithLifecycle()?.value ?: PhoneSessionRuntime.Status()
+    val start: (Int) -> Unit = { value ->
+        error =
+            runCatching {
+                context.startForegroundService(
+                    Intent(context, PhoneSessionService::class.java)
+                        .putExtra(PhoneSessionService.EXTRA_PORT, value),
+                )
+            }
+                .exceptionOrNull()
+                ?.let { R.string.listener_start_failed }
+    }
+    val permission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) start(port) else error = R.string.listener_permission_denied
+        }
+    LaunchedEffect(Unit) {
+        if (!LocalNetworkPermission.isMissing(context)) start(port)
+    }
+    if (showSettings)
+        ListenerPortDialog(port, { showSettings = false }) { value ->
+            port = value
+            prefs.edit().putInt("port", value).apply()
+            showSettings = false
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN &&
+                    LocalNetworkPermission.isMissing(context)
+            ) {
+                permission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+            } else start(value)
+        }
+    status.comparison?.let { number ->
+        AlertDialog(
+            onDismissRequest = { runtime?.approve(false) },
+            title = { Text(stringResource(R.string.listener_compare_title)) },
+            text = { Text(stringResource(R.string.listener_compare_number, number)) },
+            confirmButton = {
+                TextButton(onClick = { runtime?.approve(true) }) {
+                    Text(stringResource(R.string.pairing_match))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { runtime?.approve(false) }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+    if (showUnpair) {
+        AlertDialog(
+            onDismissRequest = { showUnpair = false },
+            title = { Text(stringResource(R.string.listener_unpair)) },
+            text = { Text(stringResource(R.string.listener_unpair_confirmation)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        error =
+                            runCatching { runtime?.unpair() }
+                                .exceptionOrNull()
+                                ?.let { R.string.listener_unpair_failed }
+                        showUnpair = false
+                    },
+                ) {
+                    Text(stringResource(R.string.listener_unpair_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnpair = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+    ListenerAction(Icons.Outlined.Settings, R.string.listener_settings) { showSettings = true }
+    if (status.paired)
+        ListenerAction(Icons.Outlined.Delete, R.string.listener_unpair_action) { showUnpair = true }
+    val title = stringResource(R.string.test_notification_title)
+    val message = stringResource(R.string.test_notification_sample)
+    ListenerAction(
+        Icons.Outlined.Notifications,
+        R.string.test_notification_send,
+        status.phase == PhoneSessionRuntime.Phase.READY,
+    ) {
+        val key = "localbell-test-${UUID.randomUUID()}"
+        val item =
+            NotificationRequest(key, "LocalBell", context.packageName, title, message)
+                .withAppArtwork(context)
+        error =
+            if (runtime?.offer(SessionDelivery.Kind.TEST, key, item.sessionPayload()) == true) null
+            else R.string.listener_test_failed
+    }
+    SectionHeader(stringResource(R.string.listener_status_title))
+    ListenerStatus(port, status)
+    error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+}
+
+@Composable
+private fun ListenerPortDialog(port: Int, dismiss: () -> Unit, save: (Int) -> Unit) {
+    var text by rememberSaveable { mutableStateOf(port.toString()) }
+    val parsed = text.toIntOrNull()?.takeIf { it in 1..65535 }
+    AlertDialog(
+        onDismissRequest = dismiss,
+        title = { Text(stringResource(R.string.listener_settings)) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { if (it.length <= 5 && it.all(Char::isDigit)) text = it },
+                label = { Text(stringResource(R.string.pairing_port)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = parsed != null, onClick = { parsed?.let(save) }) {
+                Text(stringResource(R.string.listener_start))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = dismiss) { Text(stringResource(android.R.string.cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun ListenerAction(
+    icon: ImageVector,
+    label: Int,
+    enabled: Boolean = true,
+    click: () -> Unit,
+) {
+    Card(onClick = click, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(MaterialTheme.spacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                stringResource(label),
+                modifier = Modifier.padding(start = MaterialTheme.spacing.lg),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListenerStatus(port: Int, status: PhoneSessionRuntime.Status) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(MaterialTheme.spacing.lg)) {
+            val phase =
+                when (status.phase) {
+                    PhoneSessionRuntime.Phase.STARTING -> R.string.listener_starting
+                    PhoneSessionRuntime.Phase.LISTENING -> R.string.listener_waiting
+                    PhoneSessionRuntime.Phase.PAIRING -> R.string.listener_pairing
+                    PhoneSessionRuntime.Phase.UNAVAILABLE -> R.string.listener_unavailable
+                    PhoneSessionRuntime.Phase.READY -> R.string.listener_ready
+                    PhoneSessionRuntime.Phase.FAILED -> R.string.listener_start_failed
+                    PhoneSessionRuntime.Phase.STOPPED -> R.string.listener_stopped
+                }
+            Text(stringResource(phase), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.listener_port_status, port))
+            status.address?.let { Text(stringResource(R.string.listener_peer_status, it)) }
+            Text(stringResource(R.string.listener_forwarded, status.forwarded))
+            status.outcomeTime?.let { stamp ->
+                val context = LocalContext.current
+                val time =
+                    android.text.format.DateFormat.getTimeFormat(context)
+                        .format(java.util.Date(stamp))
+                val outcome =
+                    stringResource(
+                        if (status.accepted == true) R.string.listener_outcome_accepted
+                        else R.string.listener_outcome_failed,
+                    )
+                Text(stringResource(R.string.listener_outcome_status, outcome, time))
+            }
+            status.testAccepted?.let {
+                Text(
+                    stringResource(
+                        if (it) R.string.listener_test_delivered else R.string.listener_test_failed,
+                    ),
+                )
+            }
+        }
+    }
+}

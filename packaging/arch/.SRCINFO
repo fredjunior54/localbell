@@ -1,6 +1,6 @@
 pkgbase = localbell-bin
 	pkgdesc = Forward Android push notifications to your Linux desktop via D-Bus
-	pkgver = 1.4.16
+	pkgver = 1.4.17
 	pkgrel = 1
 	url = https://github.com/fredjunior54/localbell
 	arch = x86_64
@@ -9,9 +9,9 @@ pkgbase = localbell-bin
 	optdepends = libnotify: desktop notification daemon interaction
 	optdepends = dunst: lightweight notification daemon
 	optdepends = mako: notification daemon for Wayland
-	provides = localbell=1.4.16
+	provides = localbell=1.4.17
 	conflicts = localbell
-	source = https://github.com/fredjunior54/localbell/releases/download/v1.4.16/localbell-1.4.16-linux-amd64.tar.gz
+	source = https://github.com/fredjunior54/localbell/releases/download/v1.4.17/localbell-1.4.17-linux-amd64.tar.gz
 	sha256sums = SKIP
 
 pkgname = localbell-bin

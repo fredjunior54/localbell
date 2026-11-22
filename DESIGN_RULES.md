@@ -16,7 +16,7 @@ Use Material You (Android Expressive) for this phone-first Android 14+ Compose a
 
 - Prefer filled cards, Material dialogs, and outlined Material Symbols for new UI. Do not substitute symbols for product artwork or change existing icons outside the scope of a screen update.
 - Do not add ad hoc dimensions, typography, or colors, decorative gradients, filler text, or animations without a UI purpose. Use Material component motion defaults or named Material motion tokens rather than inline durations.
-- Use sentence case and English string resources for user-facing text. Label icon-only actions for TalkBack and mark decorative images as such.
+- Use sentence case and English string resources for user-facing text. Keep the requested **Send Test Notification** label in title case. Label icon-only actions for TalkBack and mark decorative images as such.
 - Preserve edge-to-edge system insets and predictive back. Interactive targets must be at least 48 dp. Show empty, loading, and error states for asynchronous content.
 - Preview new or updated surfaces in light and dark modes. Check contrast at 4.5:1 for text and 3:1 for non-text controls; verify representative device palettes and do not assume that arbitrary wallpaper-derived combinations meet contrast.
 

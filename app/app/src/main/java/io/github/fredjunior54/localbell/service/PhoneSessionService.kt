@@ -17,6 +17,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 internal class PhoneSessionService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val deadlines = ScheduledThreadPoolExecutor(1).apply { removeOnCancelPolicy = true }
+    private var currentPort: Int? = null
     private var session: PhoneSessionRuntime? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -40,11 +43,17 @@ internal class PhoneSessionService : Service() {
             createNotification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
-        if (session == null) {
+        if (
+            session == null ||
+                currentPort != port ||
+                session?.status?.value?.phase == PhoneSessionRuntime.Phase.FAILED
+        ) {
+            session?.close()
+            currentPort = port
             val runtime =
                 PhoneSessionRuntime(File(noBackupFilesDir, "desktop-v1.digest"), deadlines)
             session = runtime
-            active = runtime
+            activeRuntime.value = runtime
             scope.launch { runtime.run(port) }
         }
         return START_NOT_STICKY
@@ -68,7 +77,7 @@ internal class PhoneSessionService : Service() {
             .build()
 
     override fun onDestroy() {
-        if (active === session) active = null
+        if (active === session) activeRuntime.value = null
         session?.close()
         deadlines.shutdownNow()
         scope.cancel()
@@ -80,8 +89,9 @@ internal class PhoneSessionService : Service() {
         const val DEFAULT_PORT = 19420
         private const val NOTIFICATION_ID = 19420
 
-        @Volatile
-        var active: PhoneSessionRuntime? = null
-            private set
+        private val activeRuntime = MutableStateFlow<PhoneSessionRuntime?>(null)
+        val sessions = activeRuntime.asStateFlow()
+        val active: PhoneSessionRuntime?
+            get() = sessions.value
     }
 }

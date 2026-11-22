@@ -1,6 +1,7 @@
 package io.github.fredjunior54.localbell.ui.screens
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -89,7 +90,9 @@ class MainScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithText("Configure first").assertIsDisplayed()
+        composeTestRule
+            .onNode(hasText("Server Status") and hasText("Configure first"))
+            .assertIsDisplayed()
     }
 
     @Test

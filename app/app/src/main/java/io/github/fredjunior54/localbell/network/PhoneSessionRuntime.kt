@@ -41,6 +41,7 @@ internal class PhoneSessionRuntime(
         val address: String? = null,
         val forwarded: Long = 0,
         val accepted: Boolean? = null,
+        val outcomeTime: Long? = null,
         val testAccepted: Boolean? = null,
     )
 
@@ -201,6 +202,7 @@ internal class PhoneSessionRuntime(
                                         if (kind == SessionDelivery.Kind.AUTOMATIC && accepted) 1
                                         else 0,
                                 accepted = accepted,
+                                outcomeTime = System.currentTimeMillis(),
                                 testAccepted =
                                     if (kind == SessionDelivery.Kind.TEST) accepted
                                     else it.testAccepted,
@@ -210,12 +212,15 @@ internal class PhoneSessionRuntime(
             }
         synchronized(lock) {
             if (closed || connection.isClosed) return
-            mutableStatus.value =
-                Status(
-                    if (ready) Phase.READY else Phase.UNAVAILABLE,
+            mutableStatus.update {
+                it.copy(
+                    phase = if (ready) Phase.READY else Phase.UNAVAILABLE,
                     paired = true,
                     address = connection.inetAddress.hostAddress,
+                    forwarded = 0,
+                    testAccepted = null,
                 )
+            }
             if (ready) delivery = session
         }
         session.use { it.run() }

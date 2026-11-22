@@ -24,9 +24,9 @@ class TestNotificationActionTest {
         compose.setContent {
             LocalBellTheme { TestNotificationAction(state.value, ready.value) { sends++ } }
         }
-        compose.onNodeWithText("Send test notification").assertIsNotEnabled()
+        compose.onNodeWithText("Send Test Notification").assertIsNotEnabled()
         compose.runOnIdle { ready.value = true }
-        compose.onNodeWithText("Send test notification").performClick()
+        compose.onNodeWithText("Send Test Notification").performClick()
         compose.runOnIdle {
             assertEquals(1, sends)
             state.value = MainScreenViewModel.TestNotificationUi(sending = true)
