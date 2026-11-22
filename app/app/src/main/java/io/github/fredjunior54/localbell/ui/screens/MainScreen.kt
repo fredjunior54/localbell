@@ -92,7 +92,7 @@ fun MainScreen() {
     if (showAboutDialog) {
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
-            title = { Text(stringResource(R.string.app_name)) },
+            title = { LocalBellWordmark() },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -170,7 +170,7 @@ fun MainScreenContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("LocalBell") },
+                title = { LocalBellWordmark() },
                 actions = {
                     IconButton(onClick = onAboutClick) {
                         Icon(

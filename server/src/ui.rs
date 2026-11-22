@@ -43,7 +43,26 @@ fn symbol_family() -> FontFamily {
     FontFamily::Name("nerd-symbols".into())
 }
 
+fn wordmark(prefix: &str, size: f32) -> egui::text::LayoutJob {
+    let mut label = egui::text::LayoutJob::default();
+    let font = egui::FontId::proportional(size);
+    for (text, color) in [
+        (prefix, MAUVE),
+        ("Local", Color32::WHITE),
+        ("Bell", Color32::from_rgb(137, 180, 250)),
+    ] {
+        label.append(text, 0.0, egui::TextFormat::simple(font.clone(), color));
+    }
+    label
+}
+
 fn section(ui: &mut egui::Ui, symbol: char, text: &str) {
+    section_with(ui, symbol, |ui| {
+        ui.label(egui::RichText::new(text).size(SECTION_SIZE).color(MAUVE));
+    });
+}
+
+fn section_with(ui: &mut egui::Ui, symbol: char, title: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         ui.label(
             egui::RichText::new(symbol.to_string())
@@ -51,7 +70,7 @@ fn section(ui: &mut egui::Ui, symbol: char, text: &str) {
                 .size(SECTION_SIZE)
                 .color(MAUVE),
         );
-        ui.label(egui::RichText::new(text).size(SECTION_SIZE).color(MAUVE));
+        title(ui);
     });
 }
 
@@ -228,7 +247,7 @@ impl eframe::App for App {
             .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.heading(egui::RichText::new("LocalBell").size(24.0).color(MAUVE));
+                        ui.label(wordmark("", 24.0));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if action(ui, INFO_ICON, "About", MAUVE, true).clicked() {
                                 self.about_open = true;
@@ -278,7 +297,9 @@ impl App {
             let available = ctx.content_rect().size();
             let width = (available.x - 2.0 * (SECTION_GAP + f32::from(INSET))).clamp(1.0, 360.0);
             ui.set_width(width);
-            section(ui, INFO_ICON, "About LocalBell");
+            section_with(ui, INFO_ICON, |ui| {
+                ui.label(wordmark("About ", SECTION_SIZE));
+            });
             ui.add_space(GAP);
             egui::ScrollArea::vertical()
                 .max_height((available.y - 120.0).max(1.0))

@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.25</strong></p>
+<p align="center"><strong>Version 1.4.26</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -12,7 +12,7 @@
     <img src="https://img.shields.io/github/actions/workflow/status/fredjunior54/localbell/ci.yml?style=for-the-badge&label=CI" alt="CI">
   </a>
   <a href="https://github.com/fredjunior54/localbell/releases/latest">
-    <img src="https://img.shields.io/badge/Download-GitHub_Releases-181717?style=for-the-badge&logo=github" alt="Download from GitHub Releases">
+    <img src="https://img.shields.io/badge/Download-GitHub_Releases-336699?style=for-the-badge&logo=github" alt="Download from GitHub Releases">
   </a>
   <img src="https://img.shields.io/badge/Linux-x86--64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux x86-64">
   <img src="https://img.shields.io/badge/Android-14%2B-3DDC84?style=for-the-badge&logo=android&logoColor=black" alt="Android 14 and later">
@@ -20,6 +20,11 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-AGPL--3.0-336699?style=for-the-badge" alt="AGPL-3.0 license">
   </a>
+</p>
+
+<p align="center">
+  <a href="assets/screenshot-android.jpg"><img src="assets/screenshot-android.jpg" width="24%" alt="LocalBell on Android showing setup and forwarding status"></a>
+  <a href="assets/screenshot-client.jpg"><img src="assets/screenshot-client.jpg" width="72%" alt="LocalBell on Linux showing the connected phone and About dialog"></a>
 </p>
 
 Maintained by **[Fred Junior](https://github.com/fredjunior54)**. LocalBell is a fork of **[LaNotifica](https://github.com/alessandrolattao/lanotifica)**, originally created by Alessandro Lattao.
