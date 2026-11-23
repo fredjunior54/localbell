@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.33</strong></p>
+<p align="center"><strong>Version 1.4.34</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -103,7 +103,7 @@ paru -Syu
 sudo pacman -R localbell-bin
 ```
 
-**Debian 12 / Ubuntu 24.04 (amd64):** Download `localbell_X.Y.Z_amd64.deb` from a release. Install it or upgrade by passing the newer file to APT; remove it with `apt remove`:
+**Debian and Ubuntu (amd64):** Download `localbell_X.Y.Z_amd64.deb` from a release. Install it or upgrade by passing the newer file to APT; remove it with `apt remove`:
 
 ```bash
 sudo apt install ./localbell_X.Y.Z_amd64.deb
