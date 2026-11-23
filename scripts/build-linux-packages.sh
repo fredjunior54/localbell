@@ -7,7 +7,15 @@ mode=$1 version=$2
 [[ $mode =~ ^(binary|deb|rpm|all)$ ]] || fail "Unknown build mode: $mode"
 root=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
 cd "$root"
-command -v docker >/dev/null || fail 'Docker is required to build release packages.'
+case $mode in
+    binary) tools=(docker) ;;
+    deb) tools=(dpkg-deb) ;;
+    rpm) tools=(rpmbuild) ;;
+    all) tools=(dpkg-deb rpmbuild) ;;
+esac
+for tool in "${tools[@]}"; do
+    command -v "$tool" >/dev/null || fail "Missing tool: $tool"
+done
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p dist
@@ -45,7 +53,7 @@ if [[ $mode == deb || $mode == all ]]; then
     mkdir -p "$tree/DEBIAN"
     sed "s/\${VERSION}/$version/" packaging/deb/DEBIAN/control > "$tree/DEBIAN/control"
     name=localbell_${version}_amd64.deb
-    run debian:12-slim dpkg-deb --root-owner-group --build /work/deb "/work/$name"
+    dpkg-deb --root-owner-group --build "$tree" "$work/$name"
     install -m644 "$work/$name" "dist/$name"
 fi
 if [[ $mode == rpm || $mode == all ]]; then
@@ -54,11 +62,7 @@ if [[ $mode == rpm || $mode == all ]]; then
     cp -- dist/localbell "$entry" LICENSE server/assets/{localbell-icon.png,NERD-FONTS.txt,CaskaydiaCove-LICENSE.txt,Symbols-Nerd-LICENSE.txt} "$tree/"
     tar -czf "$work/rpm/SOURCES/localbell-$version.tar.gz" -C "$work" "localbell-$version"
     cp packaging/rpm/localbell.spec "$work/"
-    image=localbell-rpm-builder:fedora44
-    docker build --platform linux/amd64 -t "$image" - <<'DOCKERFILE'
-FROM fedora:44
-RUN dnf -y install rpm-build && dnf clean all
-DOCKERFILE
-    run "$image" rpmbuild -bb --define '_topdir /work/rpm' --define "pkg_version $version" /work/localbell.spec
+    rpmbuild -bb --target x86_64 --define "_topdir $work/rpm" \
+        --define "pkg_version $version" "$work/localbell.spec"
     install -m644 "$work/rpm/RPMS/x86_64/localbell-$version-1.x86_64.rpm" "dist/localbell-$version-1.x86_64.rpm"
 fi

@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.32</strong></p>
+<p align="center"><strong>Version 1.4.33</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -180,7 +180,7 @@ When ready to publish, run this on the build machine with GitHub CLI authenticat
 ./scripts/publish-release.sh
 ```
 
-Linux release builds use Docker with Debian 12 (Bookworm) as the Rust/glibc baseline, native Debian packaging tools, and Fedora 44 RPM tooling. Use `make deb` or `make rpm` to build the packages locally without publishing. The release artifacts are published only when the maintainer runs the publisher.
+Linux release builds compile the desktop binary in Docker with Debian 12 (Bookworm) as the Rust/glibc baseline. The publisher then packages that binary on the host with `dpkg-deb` and `rpmbuild` (install `dpkg` and `rpm-tools` on Arch Linux). Packaging does not need additional container images. Use `make deb` or `make rpm` to build the packages locally without publishing. The release artifacts are published only when the maintainer runs the publisher.
 
 The script detects the version from the current commit and verifies that the commit is on `origin/main`. If that version is already public, it prints the release URL and exits without uploading or installing anything. To publish a different version from `origin/main`, pass it explicitly: `./scripts/publish-release.sh vX.Y.Z`. The script builds the Linux binary and signed APK from the same isolated commit, verifies that their versions agree, refreshes `dist/`, then tags and publishes the signed APK, binary-only Linux archive, Debian package, and Fedora package. The publisher reports each asset’s size and transfer progress, then verifies all four assets before publishing. If the upload is interrupted, rerun the same command. It reuses the retained build and matching uploaded assets and never replaces a public release or moves a tag. If GitHub reports a mismatched or incomplete asset, review the draft before retrying. For a retained legacy draft with only two assets, preserve that draft and its local files and publish a new patch instead of replacing the existing artifacts. GitHub Actions only runs CI.
 

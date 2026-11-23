@@ -76,7 +76,7 @@ Keep only the current LocalBell artifacts in `dist/`. Retain previous verified b
 ## CI / CD
 
 - **CI** (`.github/workflows/ci.yml`): runs on every push to non-tag branches. Tests and lint for Rust and Android.
-- **Release**: runs locally on shadowBox. APK signing uses `ANDROID_SIGNING_DIR`. Linux release builds use Docker with a Debian 12 baseline and native packaging tools. GitHub Releases receives the signed APK, binary-only Linux amd64 archive, Debian package, and Fedora package. The AUR package is updated separately from `/home/antrax/Dev/aur/localbell-bin` by the maintainer. No GitHub release workflow or Play Store deployment is configured.
+- **Release**: runs locally on shadowBox. APK signing uses `ANDROID_SIGNING_DIR`. Linux release builds use Docker with a Debian 12 baseline for compilation and host `dpkg-deb` and `rpmbuild` for packaging (`dpkg` and `rpm-tools` on Arch). GitHub Releases receives the signed APK, binary-only Linux amd64 archive, Debian package, and Fedora package. The AUR package is updated separately from `/home/antrax/Dev/aur/localbell-bin` by the maintainer. No GitHub release workflow or Play Store deployment is configured.
 
 ## GitHub Actions versions (CI)
 

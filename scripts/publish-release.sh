@@ -16,7 +16,7 @@ upload_asset() (
         --fail --output /dev/null --write-out '%{http_code}' --request POST
         --header @- --header 'Content-Type: application/octet-stream' --data-binary "@$path")
     local headers="Authorization: Bearer $token"
-    # The two generated asset names need no URL escaping.
+    # The generated asset names need no URL escaping.
     if [[ -t 2 ]]; then
         response=$(curl -q --progress-bar "${options[@]}" "$endpoint?name=$name" <<< "$headers") || return 1
     else
@@ -76,7 +76,7 @@ refresh_dist() {
 }
 
 build_release() (
-    for tool in make docker java keytool file tar; do
+    for tool in make docker dpkg-deb rpmbuild java keytool file tar; do
         command -v "$tool" >/dev/null || fail "Missing tool: $tool"
     done
     signing_dir=${ANDROID_SIGNING_DIR:-}
