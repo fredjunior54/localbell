@@ -36,10 +36,10 @@ if ! grep -Fxq README.md <<< "$(printf '%s\n' "${paths[@]}")"; then
         fail 'README.md has unselected changes; select it explicitly or set those changes aside.'
     fi
 fi
-metadata=(app/app/build.gradle.kts packaging/arch/PKGBUILD packaging/arch/.SRCINFO server/Cargo.toml server/Cargo.lock README.md)
+metadata=(app/app/build.gradle.kts server/Cargo.toml server/Cargo.lock README.md)
 for path in "${metadata[@]}"; do add_path "$path"; done
 
-for tool in make makepkg cargo java flock; do
+for tool in make cargo java flock; do
     command -v "$tool" >/dev/null || fail "Missing tool: $tool"
 done
 remote_head=$(git ls-remote --exit-code origin refs/heads/main)
@@ -94,13 +94,9 @@ GIT_INDEX_FILE=$index git checkout-index -a --prefix="$work/tree/"
     [[ $(read_readme_version < README.md) == "$current" ]] || fail 'Expected one README version matching the current Android version.'
     sed -i -E "s#^(<p align=\"center\"><strong>Version )[0-9]+\.[0-9]+\.[0-9]+(</strong></p>)\$#\1${version}\2#" README.md
     [[ $(read_readme_version < README.md) == "$version" ]] || fail 'Could not synchronize the README version.'
-    sed -i -E "s/^pkgver=.*/pkgver=$version/" "${metadata[1]}"
     sed -i -E "s/^version = \"$current\"$/version = \"$version\"/" server/Cargo.toml
     sed -i "/^name = \"localbell\"$/ { n; s/^version = .*/version = \"$version\"/; }" server/Cargo.lock
-    (cd packaging/arch && makepkg --printsrcinfo > .SRCINFO)
     [[ $(read_version < "${metadata[0]}") == "$version" && $(read_code < "${metadata[0]}") == "$((code + 1))" ]]
-    grep -qx "pkgver=$version" "${metadata[1]}"
-    [[ $(sed -n 's/^[[:space:]]*pkgver = //p' "${metadata[2]}") == "$version" ]]
     grep -q '^Version:.*%{pkg_version}' packaging/rpm/localbell.spec
     grep -Fqx "Version: \${VERSION}" packaging/deb/DEBIAN/control
     env -u LOCALBELL_KEYSTORE -u KEYSTORE_PASSWORD -u KEY_ALIAS -u KEY_PASSWORD make test lint

@@ -60,7 +60,7 @@ End every iteration that changes project files with one patch bump. Do not bump 
 
 Run `scripts/bump-version.sh "fix: Describe the change" -- path/to/file` from `main`, listing only this iteration's files. It synchronizes the version, tests, lints, commits once, and pushes `main`. It does not generate release artifacts, update `dist/`, create tags, publish to GitHub Releases, or install the APK.
 
-Only Fred Junior decides when to run `scripts/publish-release.sh`. It detects the version at `HEAD` and exits without changing anything if that version is already public. Otherwise it builds and verifies the signed APK and Linux archive from the same commit on `origin/main`, refreshes `dist/`, tags that commit, and publishes both assets. The publisher reports upload progress and verifies both remote checksums before publishing. Retries reuse the same verified artifacts. Never move a tag or overwrite a public release. After confirming publication, it attempts to update the configured phone over Wi-Fi ADB; an unavailable phone or failed install does not invalidate the release.
+Only Fred Junior decides when to run `scripts/publish-release.sh`. It detects the version at `HEAD` and exits without changing anything if that version is already public. Otherwise it builds and verifies the signed APK and Linux archive from the same commit on `origin/main`, refreshes `dist/`, tags that commit, and publishes the signed APK, binary-only Linux archive, `.deb`, and `.rpm`. The publisher reports upload progress and verifies all four remote checksums before publishing. Retries reuse the same verified artifacts. Never move a tag or overwrite a public release. After confirming publication, it attempts to update the configured phone over Wi-Fi ADB; an unavailable phone or failed install does not invalidate the release.
 
 Keep only the current LocalBell artifacts in `dist/`. Retain previous verified builds under `.git/localbell-releases/` without moving unrelated files.
 
@@ -76,7 +76,7 @@ Keep only the current LocalBell artifacts in `dist/`. Retain previous verified b
 ## CI / CD
 
 - **CI** (`.github/workflows/ci.yml`): runs on every push to non-tag branches. Tests and lint for Rust and Android.
-- **Release**: runs locally on shadowBox. APK signing uses `ANDROID_SIGNING_DIR`; GitHub Releases receives only the signed APK and binary-only Linux amd64 archive. No GitHub release workflow or Play Store deployment is configured.
+- **Release**: runs locally on shadowBox. APK signing uses `ANDROID_SIGNING_DIR`. Linux release builds use Docker with a Debian 12 baseline and native packaging tools. GitHub Releases receives the signed APK, binary-only Linux amd64 archive, Debian package, and Fedora package. The AUR package is updated separately from `/home/antrax/Dev/aur/localbell-bin` by the maintainer. No GitHub release workflow or Play Store deployment is configured.
 
 ## GitHub Actions versions (CI)
 

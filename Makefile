@@ -43,32 +43,16 @@ format-app: ## Format Kotlin code
 up: ## Start the desktop app
 	RUST_LOG="$${RUST_LOG:-localbell=debug}" cargo run --locked --manifest-path $(SERVER_DIR)/Cargo.toml
 
-rpm: build ## Build RPM package
-	mkdir -p ~/rpmbuild/SOURCES ~/rpmbuild/SPECS ~/rpmbuild/BUILD ~/rpmbuild/RPMS ~/rpmbuild/SRPMS
-	tar --transform "s,^,localbell-$(VERSION)/," \
-	    -czf ~/rpmbuild/SOURCES/localbell-$(VERSION).tar.gz \
-	    bin/localbell packaging/ LICENSE
-	rpmbuild -bb --define "pkg_version $(VERSION)" packaging/rpm/localbell.spec
+rpm: release-linux ## Build the Fedora RPM package
+	./scripts/build-linux-packages.sh rpm "$(VERSION)"
 
-deb: build ## Build DEB package
-	rm -rf /tmp/localbell-deb
-	mkdir -p dist
-	mkdir -p /tmp/localbell-deb/usr/bin
-	mkdir -p /tmp/localbell-deb/usr/share/doc/localbell
-	mkdir -p /tmp/localbell-deb/DEBIAN
-	cp bin/localbell /tmp/localbell-deb/usr/bin/
-	cp LICENSE /tmp/localbell-deb/usr/share/doc/localbell/copyright
-	sed 's/$${VERSION}/$(DEB_VERSION)/' packaging/deb/DEBIAN/control > /tmp/localbell-deb/DEBIAN/control
-	dpkg-deb --root-owner-group --build /tmp/localbell-deb dist/localbell_$(DEB_VERSION)_amd64.deb
+deb: release-linux ## Build the Debian package
+	./scripts/build-linux-packages.sh deb "$(VERSION)"
 
 tarball: release-linux ## Build the Linux desktop archive
 
 clean: ## Remove build artifacts
 	rm -rf bin/ dist/
 
-release-linux: ## Build the versioned Linux amd64 desktop archive
-	cargo build --locked --release --target x86_64-unknown-linux-gnu --manifest-path $(SERVER_DIR)/Cargo.toml
-	mkdir -p dist
-	install -m755 $(SERVER_DIR)/target/x86_64-unknown-linux-gnu/release/localbell dist/localbell
-	test "$$(dist/localbell --version)" = "$(VERSION)"
-	tar -czf dist/localbell-$(VERSION)-linux-amd64.tar.gz -C dist localbell
+release-linux: ## Build the portable Linux amd64 archive
+	./scripts/build-linux-packages.sh binary "$(VERSION)"

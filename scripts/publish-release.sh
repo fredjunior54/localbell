@@ -56,8 +56,9 @@ install_wifi_apk() {
 }
 
 refresh_dist() {
-    local dist=$1 assets=$2 history=$3 version=$4 entry archive
-    local managed='^localbell(-[0-9]+\.[0-9]+\.[0-9]+(\.apk|-linux-amd64\.tar\.gz)|-linux-amd64\.tar\.gz|-migration-test\.apk)?$'
+    local dist=$1 assets=$2 history=$3 entry archive
+    shift 3
+    local managed='^localbell(-[0-9]+\.[0-9]+\.[0-9]+(\.apk|-linux-amd64\.tar\.gz|-1\.x86_64\.rpm)|_[0-9]+\.[0-9]+\.[0-9]+_amd64\.deb|-linux-amd64\.tar\.gz|-migration-test\.apk)?$'
     [[ ! -L $dist ]] || fail 'Refusing to update a symlinked dist directory.'
     mkdir -p -- "$dist"
     local old=()
@@ -71,11 +72,11 @@ refresh_dist() {
         mv -- "${old[@]}" "$archive/"
         printf 'Previous local outputs moved to: %s\n' "$archive"
     fi
-    cp -- "$assets/localbell-$version.apk" "$assets/localbell-$version-linux-amd64.tar.gz" "$dist/"
+    for entry in "$@"; do cp -- "$assets/$entry" "$dist/"; done
 }
 
 build_release() (
-    for tool in make cargo java keytool file tar; do
+    for tool in make docker java keytool file tar; do
         command -v "$tool" >/dev/null || fail "Missing tool: $tool"
     done
     signing_dir=${ANDROID_SIGNING_DIR:-}
@@ -121,6 +122,7 @@ build_release() (
     code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' app/app/build.gradle.kts)
     [[ $code =~ ^[1-9][0-9]*$ ]] || fail 'Invalid Android version code in the release commit.'
     make release-linux VERSION="$version"
+    ./scripts/build-linux-packages.sh all "$version"
     (cd app && ANDROID_HOME="$sdk" ./gradlew assembleRelease --no-daemon)
     apk=app/app/build/outputs/apk/release/app-release.apk
     "$apksigner" verify "$apk"
@@ -131,9 +133,9 @@ build_release() (
     [[ $(file -b dist/localbell) == *'ELF 64-bit'*'x86-64'* && $(dist/localbell --version) == "$version" ]] || fail 'Desktop binary architecture or version does not match the release.'
     mkdir "$work/assets"
     cp "$apk" "$work/assets/localbell-$version.apk"
-    cp "$archive" "$work/assets/"
+    cp "$archive" "dist/$deb" "dist/$rpm" "$work/assets/"
     printf '%s\n' "$commit" > "$work/assets/commit"
-    (cd "$work/assets" && sha256sum -- "localbell-$version.apk" "localbell-$version-linux-amd64.tar.gz" > SHA256SUMS)
+    (cd "$work/assets" && sha256sum -- "${files[@]}" > SHA256SUMS)
     mv -T -- "$work/assets" "$assets"
 )
 
@@ -183,11 +185,14 @@ fi
 assets=$release_dir/$tag
 apk=localbell-$version.apk
 archive=localbell-$version-linux-amd64.tar.gz
+deb=localbell_${version}_amd64.deb
+rpm=localbell-$version-1.x86_64.rpm
+files=("$apk" "$archive" "$deb" "$rpm")
 git fetch --no-tags origin refs/heads/main
 if [[ -e $assets || -L $assets ]]; then
     [[ -d $assets && ! -L $assets ]] || fail 'Unexpected retained build directory.'
-    for file in commit SHA256SUMS "$apk" "$archive"; do
-        [[ -f $assets/$file && ! -L $assets/$file ]] || fail "Missing or unexpected retained file: $file"
+    for file in commit SHA256SUMS "${files[@]}"; do
+        [[ -f $assets/$file && ! -L $assets/$file ]] || fail "Missing or unexpected retained file: $file. For a legacy two-asset draft, retain the existing build and publish a new patch with all four assets; do not overwrite the draft assets."
     done
     commit=$(<"$assets/commit")
     [[ $commit =~ ^[0-9a-f]{40}$ && $(git rev-parse --verify "$commit^{commit}") == "$commit" ]] || fail 'Invalid retained commit.'
@@ -227,12 +232,10 @@ if [[ ! -d $assets ]]; then
 else
     status "Reusing retained release artifacts for $tag."
 fi
-checksums=$(cd "$assets" && sha256sum -- "$apk" "$archive")
+checksums=$(cd "$assets" && sha256sum -- "${files[@]}")
 [[ $checksums == "$(<"$assets/SHA256SUMS")" ]] || fail 'Retained artifacts do not match their checksums.'
-apk_digest=${checksums%% *}
-archive_digest=${checksums##*$'\n'}
-archive_digest=${archive_digest%% *}
-refresh_dist "$PWD/dist" "$assets" "$release_dir" "$version"
+expected=$(jq -Rn '[inputs | split("  ") | {(.[1]): ("sha256:" + .[0])}] | add' <<< "$checksums")
+refresh_dist "$PWD/dist" "$assets" "$release_dir" "${files[@]}"
 if [[ -z $remote ]] && ! git show-ref --verify --quiet "$ref"; then
     git tag -a "$tag" "$commit" -m "Release $tag"
 fi
@@ -256,20 +259,18 @@ fi
 [[ $id =~ ^[0-9]+$ ]] || fail 'Could not identify the GitHub release.'
 release_json() { gh api --hostname github.com "repos/$repo/releases/$id"; }
 matching_assets() {
-    jq -e --arg tag "$tag" --arg apk "$apk" --arg linux "$archive" \
-        --arg apkDigest "sha256:$apk_digest" --arg linuxDigest "sha256:$archive_digest" '
+    jq -e --arg tag "$tag" --argjson expected "$expected" '
         .tag_name == $tag and (.prerelease == false) and
         ([.assets[].name] | length == (unique | length)) and
         all(.assets[]; .state == "uploaded" and
-            ((.name == $apk and .digest == $apkDigest) or
-             (.name == $linux and .digest == $linuxDigest)))' >/dev/null
+            ($expected[.name] != null and .digest == $expected[.name]))' >/dev/null
 }
 matching_assets <<< "$release" || fail 'GitHub release metadata or assets do not match the prepared build.'
 if jq -e '.draft == true' <<< "$release" >/dev/null; then
     endpoint="https://uploads.github.com/repos/$repo/releases/$id/assets"
     advertised=$(jq -er '.upload_url' <<< "$release") || fail 'GitHub did not return an upload URL.'
     [[ $advertised == "$endpoint{?name,label}" ]] || fail 'Unexpected GitHub release upload URL.'
-    for file in "$apk" "$archive"; do
+    for file in "${files[@]}"; do
         if jq -e --arg file "$file" 'any(.assets[]; .name == $file)' <<< "$release" >/dev/null; then
             status "Already uploaded and verified: $file."
         else
@@ -279,17 +280,17 @@ if jq -e '.draft == true' <<< "$release" >/dev/null; then
             status "GitHub accepted $file."
         fi
     done
-    status 'Verifying both remote asset checksums.'
+    status 'Verifying all remote asset checksums.'
     release=$(release_json)
     matching_assets <<< "$release" || fail 'Uploaded assets do not match the prepared build.'
-    jq -e '.assets | length == 2' <<< "$release" >/dev/null || fail 'Both assets must be uploaded before publication.'
+    jq -e '.assets | length == 4' <<< "$release" >/dev/null || fail 'All four assets must be uploaded before publication.'
     status "Publishing $tag on GitHub."
     gh api --hostname github.com --method PATCH "repos/$repo/releases/$id" -F draft=false >/dev/null
 fi
 status 'Checking the public release.'
 release=$(release_json)
 matching_assets <<< "$release" || fail 'Published assets do not match the prepared build.'
-jq -e '.draft == false and (.assets | length == 2)' <<< "$release" >/dev/null || fail 'Release is not public with both assets.'
+jq -e '.draft == false and (.assets | length == 4)' <<< "$release" >/dev/null || fail 'Release is not public with all four assets.'
 jq -r .html_url <<< "$release"
 
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}

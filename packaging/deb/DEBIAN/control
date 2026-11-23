@@ -4,7 +4,9 @@ Section: net
 Priority: optional
 Architecture: amd64
 Maintainer: Alessandro Lattao <alessandro@lattao.com>
+Depends: libc6 (>= 2.36), libgcc-s1, libxkbcommon0, libegl1, libgl1, dbus
+Recommends: xdg-utils
 Description: Android notification forwarder for Linux desktop
- HTTP server that receives notifications from Android devices
- and displays them on Linux desktop via D-Bus notifications.
+ Displays Android notifications through the desktop D-Bus service
+ using a direct certificate-pinned TLS connection.
 Homepage: https://github.com/fredjunior54/localbell

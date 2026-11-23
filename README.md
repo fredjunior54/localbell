@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LocalBell</h1>
-<p align="center"><strong>Version 1.4.31</strong></p>
+<p align="center"><strong>Version 1.4.32</strong></p>
 
 <p align="center"><strong>Forward Android notifications to your Linux desktop.</strong></p>
 
@@ -91,6 +91,35 @@ To remove the installed executable and launcher (including its icon), run from t
 
 Uninstalling preserves your pairing and configuration.
 
+#### 🐧 Native Linux packages
+
+The Arch recipe and the Debian and Fedora package builds are maintained here. Check [GitHub Releases](https://github.com/fredjunior54/localbell/releases) for the actual `.deb` and `.rpm` assets. Older releases may only have the standalone archive. These packages install the executable, desktop launcher, and icon without configuring startup at login.
+
+**Arch Linux:** After `localbell-bin` is published in the AUR, install it or upgrade your Arch system and AUR packages with `paru` (or substitute `yay`). Remove it with `pacman`:
+
+```bash
+paru -S localbell-bin
+paru -Syu
+sudo pacman -R localbell-bin
+```
+
+**Debian 12 / Ubuntu 24.04 (amd64):** Download `localbell_X.Y.Z_amd64.deb` from a release. Install it or upgrade by passing the newer file to APT; remove it with `apt remove`:
+
+```bash
+sudo apt install ./localbell_X.Y.Z_amd64.deb
+sudo apt remove localbell
+```
+
+**Fedora 44 (x86_64):** Download `localbell-X.Y.Z-1.x86_64.rpm` from a release. Use DNF to install it, upgrade using a newer file, or remove it:
+
+```bash
+sudo dnf install ./localbell-X.Y.Z-1.x86_64.rpm
+sudo dnf upgrade ./localbell-X.Y.Z-1.x86_64.rpm
+sudo dnf remove localbell
+```
+
+The `.deb` and `.rpm` downloads do not add an update repository. Remove a previous per-user install before switching to a native package to avoid launching the older copy. The [standalone archive](#-desktop-linux) remains available.
+
 ### 📱 App (Android)
 
 Download and install `localbell-X.Y.Z.apk` from the same release. Android may ask you to allow installation from the app you used to open the APK. The listener binds IPv4 on port `19420` by default and rejects nonlocal peers before TLS. A wildcard bind is not VPN-only.
@@ -151,7 +180,9 @@ When ready to publish, run this on the build machine with GitHub CLI authenticat
 ./scripts/publish-release.sh
 ```
 
-The script detects the version from the current commit and verifies that the commit is on `origin/main`. If that version is already public, it prints the release URL and exits without uploading or installing anything. To publish a different version from `origin/main`, pass it explicitly: `./scripts/publish-release.sh vX.Y.Z`. The script builds the Linux binary and signed APK from the same isolated commit, verifies that their versions agree, refreshes `dist/`, then tags and publishes the two assets. The publisher reports each asset’s size and transfer progress, then verifies both files before publishing. If the upload is interrupted, rerun the same command. It reuses the retained build and matching uploaded assets and never replaces a public release or moves a tag. If GitHub reports a mismatched or incomplete asset, review the draft before retrying. GitHub Actions only runs CI.
+Linux release builds use Docker with Debian 12 (Bookworm) as the Rust/glibc baseline, native Debian packaging tools, and Fedora 44 RPM tooling. Use `make deb` or `make rpm` to build the packages locally without publishing. The release artifacts are published only when the maintainer runs the publisher.
+
+The script detects the version from the current commit and verifies that the commit is on `origin/main`. If that version is already public, it prints the release URL and exits without uploading or installing anything. To publish a different version from `origin/main`, pass it explicitly: `./scripts/publish-release.sh vX.Y.Z`. The script builds the Linux binary and signed APK from the same isolated commit, verifies that their versions agree, refreshes `dist/`, then tags and publishes the signed APK, binary-only Linux archive, Debian package, and Fedora package. The publisher reports each asset’s size and transfer progress, then verifies all four assets before publishing. If the upload is interrupted, rerun the same command. It reuses the retained build and matching uploaded assets and never replaces a public release or moves a tag. If GitHub reports a mismatched or incomplete asset, review the draft before retrying. For a retained legacy draft with only two assets, preserve that draft and its local files and publish a new patch instead of replacing the existing artifacts. GitHub Actions only runs CI.
 
 To automatically update an already-paired phone over Wi-Fi, run `adb devices -l` while the phone is online. Copy its exact serial ending in `._adb-tls-connect._tcp`, then save it once in fish (replace the example serial):
 
@@ -159,7 +190,7 @@ To automatically update an already-paired phone over Wi-Fi, run `adb devices -l`
 set -Ux LOCALBELL_ADB_WIFI_DEVICE 'adb-EXAMPLE._adb-tls-connect._tcp'
 ```
 
-After confirming that the GitHub release is public with both verified assets, the publisher updates only that phone without clearing app data or downgrading. An unavailable phone or failed APK install does not invalidate the release.
+After confirming that the GitHub release is public with all four verified assets, the publisher updates only that phone without clearing app data or downgrading. An unavailable phone or failed APK install does not invalidate the release.
 
 ## 📄 License
 
