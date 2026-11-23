@@ -299,4 +299,5 @@ if [[ -z $sdk ]] && command -v fish >/dev/null; then
     sdk=$(fish -c 'printf "%s" "$ANDROID_HOME"') || sdk=''
 fi
 status 'Checking for the configured Wi-Fi ADB phone.'
-install_wifi_apk "$assets/$apk" "$sdk"
+# Do not let a newly started ADB daemon inherit the release lock.
+install_wifi_apk "$assets/$apk" "$sdk" 9>&-
