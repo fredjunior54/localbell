@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="assets/screenshot-android.png"><img src="assets/screenshot-android.jpg" width="24%" alt="LocalBell on Android showing setup and forwarding status"></a>
+  <a href="assets/screenshot-android.png"><img src="assets/screenshot-android.png" width="24%" alt="LocalBell on Android showing setup and forwarding status"></a>
   <a href="assets/screenshot-client.jpg"><img src="assets/screenshot-client.jpg" width="72%" alt="LocalBell on Linux showing the connected phone and About dialog"></a>
 </p>
 
