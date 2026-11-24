@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="assets/screenshot-android.jpg"><img src="assets/screenshot-android.jpg" width="24%" alt="LocalBell on Android showing setup and forwarding status"></a>
+  <a href="assets/screenshot-android.png"><img src="assets/screenshot-android.jpg" width="24%" alt="LocalBell on Android showing setup and forwarding status"></a>
   <a href="assets/screenshot-client.jpg"><img src="assets/screenshot-client.jpg" width="72%" alt="LocalBell on Linux showing the connected phone and About dialog"></a>
 </p>
 
@@ -128,9 +128,9 @@ Download and install `localbell-X.Y.Z.apk` from the same release. Android may as
 
 | Component   | Requirement                                                                          |
 | ----------- | ------------------------------------------------------------------------------------ |
-| **Desktop**  | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
+| **Desktop** | Linux x86-64 with a Wayland or X11 desktop, OpenGL, and a D-Bus notification service |
 | **App**     | Android 14 or later (API 34+)                                                        |
-| **Network** | Both devices reachable on the same LAN or tailnet                                               |
+| **Network** | Both devices reachable on the same LAN or tailnet                                    |
 
 A system tray is needed to start with no window. Opening **Project page** requires `xdg-open` (xdg-utils). The installer does not require systemd.
 
